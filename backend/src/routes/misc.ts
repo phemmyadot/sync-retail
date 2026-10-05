@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import type { CreateSaleInput, SaleDTO } from '@sync-retail/shared';
 import { prisma } from '../lib/db';
@@ -13,6 +13,19 @@ import { toProductDTO } from './products';
 // ─── Settings ───────────────────────────────────────────────────────────────
 
 export const settingsRouter = Router();
+
+/** Non-sensitive subset of settings for unauthenticated screens. */
+export const publicSettings: RequestHandler = async (_req, res) => {
+  const s = await getSettings();
+  res.json({
+    storeName: s.storeName,
+    currency: s.currency,
+    locale: s.locale,
+    loyalty: s.loyalty,
+    promoBanners: s.promoBanners,
+    receiptFooter: s.receiptFooter,
+  });
+};
 
 settingsRouter.get('/', async (_req, res) => {
   res.json(await getSettings());

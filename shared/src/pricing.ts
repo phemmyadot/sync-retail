@@ -175,6 +175,21 @@ export function moneyParts(cents: number, currency = 'USD', locale = 'en-US') {
   };
 }
 
+/** Short form for chart axes and tight spaces: ₦1.3M, ₦850K, $12. */
+export function formatMoneyCompact(cents: number, currency = 'USD', locale = 'en-US'): string {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(cents / 100);
+  } catch {
+    return formatMoney(cents, currency, locale);
+  }
+}
+
 /** Just the symbol, e.g. "₦" for NGN — for input adornments and labels. */
 export function currencySymbol(currency = 'USD', locale = 'en-US'): string {
   return moneyFormatter(currency, locale).formatToParts(0).find((p) => p.type === 'currency')?.value ?? currency;
@@ -185,7 +200,7 @@ export function formatBps(bps: number): string {
   return `${Number.isInteger(pct) ? pct : pct.toFixed(2)}%`;
 }
 
-/** "12.50", "$1,299", "€4,5" → cents. Returns null for blanks/garbage. */
+/** "12.50", "₦1,299", "€4,5" → cents (any currency symbol is ignored). Returns null for blanks/garbage. */
 export function parseMoneyToCents(input: unknown): number | null {
   if (input === null || input === undefined) return null;
   if (typeof input === 'number') return Number.isFinite(input) ? Math.round(input * 100) : null;
@@ -202,4 +217,16 @@ export function parseMoneyToCents(input: unknown): number | null {
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
   return Math.round((negative ? -n : n) * 100);
+}
+
+/** Fills banner placeholders ({symbol}, {currency}, {earnRate}, {redeemPoints}, {redeemValue}). */
+export function fillBannerText(text: string, s: { currency: string; locale: string; loyalty: LoyaltyConfig }): string {
+  const values: Record<string, string> = {
+    symbol: currencySymbol(s.currency, s.locale),
+    currency: s.currency,
+    earnRate: String(s.loyalty.pointsPerDollar),
+    redeemPoints: s.loyalty.redeemBlockPoints.toLocaleString(s.locale),
+    redeemValue: formatMoney(s.loyalty.redeemBlockValueCents, s.currency, s.locale),
+  };
+  return text.replace(/\{(\w+)\}/g, (m, k: string) => values[k] ?? m);
 }

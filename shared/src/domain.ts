@@ -99,11 +99,11 @@ export interface StoreSettings {
 }
 
 export interface LoyaltyConfig {
-  /** Points earned per whole dollar paid with non-loyalty tenders. */
+  /** Points earned per whole currency unit paid with non-loyalty tenders. */
   pointsPerDollar: number;
   /** Points are redeemed in blocks: e.g. 100 points … */
   redeemBlockPoints: number;
-  /** … are worth this many cents (e.g. 500 = $5). */
+  /** … are worth this many minor units (e.g. 500 = 5.00 in the store currency). */
   redeemBlockValueCents: number;
 }
 
@@ -115,7 +115,10 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   agentMaxDiscountBps: 1000,
   receiptFooter: 'Thank you — come back soon.',
   promoBanners: [
-    { title: 'Members earn on every purchase', subtitle: 'Ask to join the rewards club today.' },
-    { title: 'Turn points into savings', subtitle: 'Redeem your rewards at any register.' },
+    { title: 'Members earn on every purchase', subtitle: 'Earn {earnRate} points for every {symbol}1 you spend.' },
+    { title: '{redeemPoints} points = {redeemValue} off', subtitle: 'Redeem your rewards at any register.' },
   ],
 };
+
+/** Placeholders usable in promo banner text; filled from the store settings. */
+export const BANNER_TOKENS = ['{symbol}', '{currency}', '{earnRate}', '{redeemPoints}', '{redeemValue}'] as const;

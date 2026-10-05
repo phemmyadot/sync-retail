@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { PAYMENT_LABEL, type ReportGranularity, type ReportSummary } from '@sync-retail/shared';
+import { formatMoneyCompact, PAYMENT_LABEL, type ReportGranularity, type ReportSummary } from '@sync-retail/shared';
+import { useSettings } from '@/hooks/useSettings';
 import { api, download, errorMessage } from '@/lib/api';
 import { useMoney } from '@/lib/format';
 import { toast } from '@/store/toast';
@@ -48,8 +49,8 @@ export function ReportsPage() {
     if (r?.range.granularity === 'month') return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
-  const compact = (c: number) =>
-    c >= 100_000_00 ? `${(c / 100_000).toFixed(0)}k` : c >= 1_000_00 ? `${(c / 100_000).toFixed(1)}k` : money(c).replace(/\.00$/, '');
+  const { data: settings } = useSettings();
+  const compact = (c: number) => formatMoneyCompact(c, settings?.currency, settings?.locale);
 
   return (
     <div className="pb-16">

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { formatBps, ROLE_LABEL, ROLES, type Role, type StoreSettings } from '@sync-retail/shared';
+import { BANNER_TOKENS, fillBannerText, formatBps, ROLE_LABEL, ROLES, type Role, type StoreSettings } from '@sync-retail/shared';
 import { api, errorMessage } from '@/lib/api';
 import { centsToInput, fmtDay, inputToCents, useCurrencySymbol, useMoney } from '@/lib/format';
 import { useAuth } from '@/store/auth';
@@ -254,11 +254,22 @@ function StoreTab() {
         </p>
 
         <h3 className="eyebrow pt-4">Customer display banners</h3>
+        <p className="text-xs text-dust">
+          Placeholders fill in from the settings above, so banners follow your currency:{' '}
+          {BANNER_TOKENS.map((t) => (
+            <code key={t} className="mr-1 rounded-xs bg-ink-3 px-1 font-mono text-bone">
+              {t}
+            </code>
+          ))}
+        </p>
         {form.promoBanners.map((b, i) => (
           <div key={i} className="grid grid-cols-[1fr_1.4fr_auto] gap-2">
             <input className="field" value={b.title} aria-label="Banner title" onChange={(e) => setForm({ ...form, promoBanners: form.promoBanners.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)) })} />
             <input className="field" value={b.subtitle} aria-label="Banner subtitle" onChange={(e) => setForm({ ...form, promoBanners: form.promoBanners.map((x, j) => (j === i ? { ...x, subtitle: e.target.value } : x)) })} />
             <Button type="button" variant="quiet" icon="trash" aria-label="Remove banner" onClick={() => setForm({ ...form, promoBanners: form.promoBanners.filter((_, j) => j !== i) })} />
+            <p className="col-span-3 -mt-1 truncate text-xs text-dust">
+              Shows as: <span className="text-bone">{fillBannerText(b.title, form)}</span> — {fillBannerText(b.subtitle, form)}
+            </p>
           </div>
         ))}
         <Button type="button" size="sm" icon="plus" onClick={() => setForm({ ...form, promoBanners: [...form.promoBanners, { title: '', subtitle: '' }] })} disabled={form.promoBanners.length >= 8}>

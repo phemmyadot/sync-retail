@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import type { DisplayMessage } from '@sync-retail/shared';
+import { fillBannerText, type DisplayMessage } from '@sync-retail/shared';
 import { subscribeDisplay } from '@/lib/display';
 import { useCurrencySymbol, useMoney } from '@/lib/format';
 import { fitClass } from '@/components/ui/Price';
@@ -53,7 +53,9 @@ export function CustomerDisplay() {
     listEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [cart?.lines.length]);
 
-  const banners = settings?.promoBanners ?? [];
+  const banners = settings
+    ? settings.promoBanners.map((b) => ({ title: fillBannerText(b.title, settings), subtitle: fillBannerText(b.subtitle, settings) }))
+    : [];
   useEffect(() => {
     if (banners.length < 2) return;
     const id = setInterval(() => setBannerIdx((i) => (i + 1) % banners.length), 7000);

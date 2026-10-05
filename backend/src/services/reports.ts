@@ -146,12 +146,13 @@ const csvCell = (v: unknown) => {
 };
 const csv = (rows: unknown[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
 
-export function reportToCsv(r: ReportSummary): string {
+export function reportToCsv(r: ReportSummary, currency: string): string {
   const t = r.totals;
+  const c = `(${currency})`;
   const sections: unknown[][] = [
     ['Sync Retail report', `${r.range.from.slice(0, 10)} → ${r.range.to.slice(0, 10)}`],
     [],
-    ['Metric', 'Value'],
+    ['Metric', `Value ${c}`],
     ['Gross sales', money(t.grossCents)],
     ['Refunds', money(t.refundedCents)],
     ['Net sales', money(t.netCents)],
@@ -162,32 +163,33 @@ export function reportToCsv(r: ReportSummary): string {
     ['Average ticket', money(t.averageTicketCents)],
     ['Items sold', t.itemsSold],
     [],
-    [`Sales by ${r.range.granularity}`, 'Net sales', 'Transactions'],
+    [`Sales by ${r.range.granularity}`, `Net sales ${c}`, 'Transactions'],
     ...r.series.map((s) => [s.bucket.slice(0, 10), money(s.totalCents), s.transactions]),
     [],
-    ['Top products', 'SKU', 'Qty', 'Revenue (ex tax)'],
+    ['Top products', 'SKU', 'Qty', `Revenue ex tax ${c}`],
     ...r.topProducts.map((p) => [p.name, p.sku, p.quantity, money(p.revenueCents)]),
     [],
-    ['Category', 'Qty', 'Revenue (ex tax)'],
+    ['Category', 'Qty', `Revenue ex tax ${c}`],
     ...r.categories.map((c) => [c.name, c.quantity, money(c.revenueCents)]),
     [],
-    ['Payment method', 'Count', 'Amount'],
+    ['Payment method', 'Count', `Amount ${c}`],
     ...r.payments.map((p) => [p.method, p.count, money(p.amountCents)]),
     [],
-    ['Staff', 'Transactions', 'Net sales', 'Avg ticket', 'Voids', 'Overrides requested'],
+    ['Staff', 'Transactions', `Net sales ${c}`, `Avg ticket ${c}`, 'Voids', 'Overrides requested'],
     ...r.workers.map((w) => [w.name, w.transactions, money(w.revenueCents), money(w.averageTicketCents), w.voids, w.overrides]),
   ];
   return '﻿' + csv(sections); // BOM so Excel opens UTF-8 correctly
 }
 
-export async function salesLedgerCsv(range: ReportRange): Promise<string> {
+export async function salesLedgerCsv(range: ReportRange, currency: string): Promise<string> {
+  const c = `(${currency})`;
   const sales = await prisma.sale.findMany({
     where: { createdAt: { gte: range.from, lte: range.to } },
     include: { cashier: { select: { name: true } }, customer: { select: { name: true } }, payments: true },
     orderBy: { createdAt: 'asc' },
   });
   const rows: unknown[][] = [
-    ['Receipt', 'Date', 'Status', 'Cashier', 'Customer', 'Subtotal', 'Discount', 'Tax', 'Total', 'Refunded', 'Payments'],
+    ['Receipt', 'Date', 'Status', 'Cashier', 'Customer', `Subtotal ${c}`, `Discount ${c}`, `Tax ${c}`, `Total ${c}`, `Refunded ${c}`, `Payments ${c}`],
     ...sales.map((s) => [
       s.receiptNo,
       s.createdAt.toISOString(),

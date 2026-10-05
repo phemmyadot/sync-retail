@@ -24,7 +24,8 @@ reportsRouter.get('/export', async (req, res) => {
   const stamp = `${range.from.toISOString().slice(0, 10)}_${range.to.toISOString().slice(0, 10)}`;
 
   if (q.format === 'csv') {
-    const csv = q.dataset === 'ledger' ? await salesLedgerCsv(range) : reportToCsv(await buildReport(range));
+    const { currency } = await getSettings();
+    const csv = q.dataset === 'ledger' ? await salesLedgerCsv(range, currency) : reportToCsv(await buildReport(range), currency);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="sync-retail-${q.dataset}-${stamp}.csv"`);
     res.send(csv);

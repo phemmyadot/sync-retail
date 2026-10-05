@@ -13,7 +13,7 @@ import { salesRouter } from './routes/sales';
 import { overridesRouter } from './routes/overrides';
 import { reportsRouter } from './routes/reports';
 import { importRouter } from './routes/imports';
-import { auditRouter, settingsRouter, syncRouter } from './routes/misc';
+import { auditRouter, publicSettings, settingsRouter, syncRouter } from './routes/misc';
 
 export function createApp() {
   const app = express();
@@ -28,6 +28,8 @@ export function createApp() {
   });
 
   app.use('/api/auth', authRouter);
+  // Login-free screens (lock screen, customer display) need currency + branding.
+  app.get('/api/settings/public', publicSettings);
 
   const api = express.Router();
   api.use(authenticate);
