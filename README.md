@@ -35,7 +35,39 @@ sync-retail/
 
 ---
 
-## Quick start (local)
+## Quick start (Docker): recommended
+
+Requires Docker Desktop (or Docker Engine + Compose v2).
+
+```bash
+cp .env.example .env        # then set POSTGRES_PASSWORD and JWT_SECRET
+docker compose up -d --build
+```
+
+Open **http://localhost:8080** and sign in with the demo logins below.
+
+| Service | Container | Host port | What it does |
+|---|---|---|---|
+| `web` | nginx | `8080` | Serves the built app; proxies `/api` and `/ws` to the API, so everything is same-origin |
+| `api` | Node 22 | `4000` | On start: `prisma migrate deploy` → demo seed (**only if the DB is empty** and `SEED_DEMO_DATA=true`) → server |
+| `db` | Postgres 17 | `5433` | Data in the `sync-retail_pgdata` volume; UTF-8 |
+
+Useful commands:
+
+```bash
+docker compose logs -f api                           # API logs
+docker compose exec api npx tsx prisma/seed.ts       # reset to fresh demo data (wipes everything!)
+docker compose exec db psql -U postgres sync_retail  # SQL shell
+docker compose up -d --build                         # rebuild after code changes
+docker compose down                                  # stop (data kept)
+docker compose down -v                               # stop and DELETE the database volume
+```
+
+**Hybrid dev:** run only the database in Docker (`docker compose up -d db`) and point `backend/.env` at `postgresql://postgres:<POSTGRES_PASSWORD>@localhost:5433/sync_retail?schema=public`. Then use `npm run dev` for hot reload on :5173.
+
+For production, set `SEED_DEMO_DATA=false` and put TLS in front of `web` (or your own reverse proxy).
+
+## Quick start (local, without Docker)
 
 **Prerequisites:** Node 20+ (22/24 recommended) and a PostgreSQL 14+ database — local, Docker, [Neon](https://neon.tech) or [Supabase](https://supabase.com).
 

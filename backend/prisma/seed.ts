@@ -64,6 +64,11 @@ const FIRST = ['Ada', 'Bola', 'Chen', 'Dami', 'Elena', 'Femi', 'Grace', 'Hiro', 
 const LAST = ['Adeyemi', 'Brooks', 'Carter', 'Diaz', 'Eze', 'Fischer', 'Gupta', 'Hassan', 'Ito', 'Johnson', 'Okafor', 'Novak'];
 
 async function main() {
+  // Container start-up passes --if-empty so restarts never wipe real data.
+  if (process.argv.includes('--if-empty') && (await prisma.user.count()) > 0) {
+    console.log('Database already has data — skipping demo seed.');
+    return;
+  }
   console.log('Resetting tables…');
   await prisma.$transaction([
     prisma.refund.deleteMany(),
