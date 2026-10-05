@@ -115,7 +115,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   agentMaxDiscountBps: 1000,
   receiptFooter: 'Thank you — come back soon.',
   promoBanners: [
-    { title: 'Members earn on every dollar', subtitle: 'Ask to join the rewards club today.' },
-    { title: '100 points = $5 off', subtitle: 'Redeem at any register.' },
+    { title: 'Members earn on every purchase', subtitle: 'Ask to join the rewards club today.' },
+    { title: 'Turn points into savings', subtitle: 'Redeem your rewards at any register.' },
   ],
 };

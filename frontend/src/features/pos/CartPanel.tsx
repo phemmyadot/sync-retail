@@ -5,6 +5,7 @@ import { useMoney } from '@/lib/format';
 import { useCart, type CartLine } from '@/store/cart';
 import { useSettings } from '@/hooks/useSettings';
 import { Icon } from '@/components/ui/Icon';
+import { fitClass } from '@/components/ui/Price';
 import { TERMINAL_ID } from '@/lib/config';
 
 interface Props {
@@ -127,7 +128,10 @@ export function CartPanel({ totals, onInc, onDec, onRemove, onDiscount, onCustom
           <Row label="Tax" value={money(totals.taxCents)} />
           <div className="mt-2 flex items-end justify-between border-t-2 border-paper-ink pt-2">
             <span className="font-mono text-xs uppercase tracking-[0.2em]">Total</span>
-            <span className="display text-5xl leading-none" aria-live="polite">
+            <span
+              className={clsx('display whitespace-nowrap leading-none', fitClass(money(totals.totalCents), [[9, 'text-5xl'], [12, 'text-4xl'], [15, 'text-3xl']], 'text-2xl'))}
+              aria-live="polite"
+            >
               {money(totals.totalCents)}
             </span>
           </div>
@@ -146,12 +150,13 @@ export function CartPanel({ totals, onInc, onDec, onRemove, onDiscount, onCustom
         <button
           onClick={onCharge}
           disabled={!lines.length}
-          className="key group flex h-16 items-center justify-between rounded-sm bg-amber px-5 text-amber-ink transition-[filter,transform] hover:brightness-110 disabled:opacity-40"
+          className="key group flex h-16 items-center justify-between gap-3 rounded-sm bg-amber px-5 text-amber-ink transition-[filter,transform] hover:brightness-110 disabled:opacity-40"
         >
           <span className="flex items-center gap-2 text-lg font-semibold">
-            Charge <span className="rounded-xs border border-amber-ink/30 px-1 font-mono text-2xs">F9</span>
+            Charge{' '}
+            {money(totals.totalCents).length <= 10 && <span className="rounded-xs border border-amber-ink/30 px-1 font-mono text-2xs">F9</span>}
           </span>
-          <span className="num flex items-center gap-2 text-xl font-bold">
+          <span className={clsx('num flex items-center gap-2 whitespace-nowrap font-bold', fitClass(money(totals.totalCents), [[10, 'text-xl'], [13, 'text-lg']], 'text-base'))}>
             {money(totals.totalCents)}
             <Icon name="arrowRight" size={20} className="transition-transform group-hover:translate-x-1" />
           </span>

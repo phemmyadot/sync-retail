@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { formatBps, ROLE_LABEL, ROLES, type Role, type StoreSettings } from '@sync-retail/shared';
 import { api, errorMessage } from '@/lib/api';
-import { centsToInput, fmtDay, inputToCents } from '@/lib/format';
+import { centsToInput, fmtDay, inputToCents, useCurrencySymbol, useMoney } from '@/lib/format';
 import { useAuth } from '@/store/auth';
 import { toast } from '@/store/toast';
 import { Avatar, Badge, Button, Input, Label, PageHeader, Segmented } from '@/components/ui/primitives';
@@ -181,6 +181,8 @@ function StoreTab() {
   const settings = useQuery({ queryKey: ['settings', true], queryFn: () => api<StoreSettings>('/settings') });
   const [form, setForm] = useState<StoreSettings | null>(null);
   const [busy, setBusy] = useState(false);
+  const money = useMoney();
+  const symbol = useCurrencySymbol();
 
   useEffect(() => {
     if (settings.data && !form) setForm(settings.data);
@@ -227,7 +229,7 @@ function StoreTab() {
         <h2 className="display text-3xl">Loyalty rewards</h2>
         <div className="grid grid-cols-3 gap-4">
           <Input
-            label="Pts per $1"
+            label={`Pts per ${symbol}1`}
             inputMode="numeric"
             value={String(l.pointsPerDollar)}
             onChange={(e) => setForm({ ...form, loyalty: { ...l, pointsPerDollar: Number(e.target.value) || 0 } })}
@@ -239,15 +241,15 @@ function StoreTab() {
             onChange={(e) => setForm({ ...form, loyalty: { ...l, redeemBlockPoints: Number(e.target.value) || 1 } })}
           />
           <Input
-            label="Block value $"
+            label={`Block value ${symbol}`}
             inputMode="decimal"
             value={centsToInput(l.redeemBlockValueCents)}
             onChange={(e) => setForm({ ...form, loyalty: { ...l, redeemBlockValueCents: inputToCents(e.target.value) || 1 } })}
           />
         </div>
         <p className="rounded-sm border border-line bg-ink p-3 text-sm text-dust">
-          A $50 purchase earns <span className="num text-amber">{50 * l.pointsPerDollar}</span> pts. {l.redeemBlockPoints} pts take{' '}
-          <span className="num text-amber">${centsToInput(l.redeemBlockValueCents)}</span> off — an effective{' '}
+          A {money(5000)} purchase earns <span className="num text-amber">{50 * l.pointsPerDollar}</span> pts. {l.redeemBlockPoints} pts take{' '}
+          <span className="num text-amber">{money(l.redeemBlockValueCents)}</span> off — an effective{' '}
           <span className="num text-bone">{((l.redeemBlockValueCents / 100 / (l.redeemBlockPoints / Math.max(1, l.pointsPerDollar))) * 100).toFixed(1)}%</span> back.
         </p>
 

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import type { DisplayMessage } from '@sync-retail/shared';
 import { subscribeDisplay } from '@/lib/display';
-import { useMoney } from '@/lib/format';
+import { useCurrencySymbol, useMoney } from '@/lib/format';
+import { fitClass } from '@/components/ui/Price';
 import { useSettings } from '@/hooks/useSettings';
 
 type CartMsg = Extract<DisplayMessage, { type: 'cart' }>;
@@ -15,6 +16,7 @@ type CheckoutMsg = Extract<DisplayMessage, { type: 'checkout' }>;
  */
 export function CustomerDisplay() {
   const money = useMoney();
+  const symbol = useCurrencySymbol();
   const { data: settings } = useSettings();
   const [cart, setCart] = useState<CartMsg | null>(null);
   const [checkout, setCheckout] = useState<CheckoutMsg | null>(null);
@@ -137,7 +139,14 @@ export function CustomerDisplay() {
 
           <div>
             <p className="eyebrow mb-2">{checkout ? 'Remaining' : 'Total'}</p>
-            <p className={clsx('display leading-none transition-colors', 'text-[clamp(4rem,8vw,8rem)]', checkout ? 'text-amber' : 'text-bone')} aria-live="polite">
+            <p
+              className={clsx(
+                'display whitespace-nowrap leading-none transition-colors',
+                fitClass(money(due), [[9, 'text-[clamp(4rem,8vw,8rem)]'], [13, 'text-[clamp(3rem,5.5vw,6rem)]']], 'text-[clamp(2.5rem,4.2vw,4.5rem)]'),
+                checkout ? 'text-amber' : 'text-bone',
+              )}
+              aria-live="polite"
+            >
               {money(due)}
             </p>
           </div>
@@ -153,7 +162,7 @@ export function CustomerDisplay() {
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-line-strong p-6 text-xl text-dust">
-              Not a member? Ask us to join — earn <span className="text-amber">{settings?.loyalty.pointsPerDollar} pt</span> per dollar.
+              Not a member? Ask us to join — earn <span className="text-amber">{settings?.loyalty.pointsPerDollar} pt</span> per {symbol}1 spent.
             </div>
           )}
         </aside>

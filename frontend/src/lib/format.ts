@@ -1,4 +1,4 @@
-import { formatMoney } from '@sync-retail/shared';
+import { currencySymbol, formatMoney } from '@sync-retail/shared';
 import { useSettings } from '@/hooks/useSettings';
 
 /** Money formatter bound to the store's currency/locale. */
@@ -7,6 +7,12 @@ export function useMoney() {
   const currency = data?.currency ?? 'USD';
   const locale = data?.locale ?? 'en-US';
   return (cents: number) => formatMoney(cents, currency, locale);
+}
+
+/** The store currency's symbol, e.g. "₦". */
+export function useCurrencySymbol() {
+  const { data } = useSettings();
+  return currencySymbol(data?.currency ?? 'USD', data?.locale ?? 'en-US');
 }
 
 export const fmtDate = (iso: string) =>

@@ -6,6 +6,7 @@ import { api, download, errorMessage } from '@/lib/api';
 import { useMoney } from '@/lib/format';
 import { toast } from '@/store/toast';
 import { Button, PageHeader, Segmented } from '@/components/ui/primitives';
+import { fitClass } from '@/components/ui/Price';
 import { BarSeries, PAYMENT_COLORS, RankBars, ShareBar } from './charts';
 
 type Preset = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
@@ -109,7 +110,14 @@ export function ReportsPage() {
           <section className="grid border-b border-line lg:grid-cols-[1.2fr_2fr]">
             <div className="border-b border-line px-6 py-8 lg:border-b-0 lg:border-r lg:px-10">
               <p className="eyebrow">Net sales</p>
-              <p className="display mt-2 text-[clamp(3.5rem,7vw,6.5rem)] leading-[0.9] text-bone">{money(r.totals.netCents)}</p>
+              <p
+                className={clsx(
+                  'display mt-2 whitespace-nowrap leading-[0.9] text-bone',
+                  fitClass(money(r.totals.netCents), [[10, 'text-[clamp(3.5rem,7vw,6.5rem)]'], [14, 'text-[clamp(2.75rem,5vw,4.75rem)]']], 'text-[clamp(2.25rem,3.8vw,3.5rem)]'),
+                )}
+              >
+                {money(r.totals.netCents)}
+              </p>
               <p className="mt-3 text-sm text-dust">
                 {new Date(r.range.from).toLocaleDateString()} — {new Date(r.range.to).toLocaleDateString()} · after{' '}
                 <span className="num text-bone">{money(r.totals.refundedCents)}</span> in refunds

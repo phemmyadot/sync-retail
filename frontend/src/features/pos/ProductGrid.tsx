@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import clsx from 'clsx';
 import type { CategoryDTO, ProductDTO } from '@sync-retail/shared';
-import { useMoney } from '@/lib/format';
 import { Empty } from '@/components/ui/primitives';
+import { Price } from '@/components/ui/Price';
 
 interface Props {
   products: ProductDTO[];
@@ -13,7 +13,6 @@ interface Props {
 
 /** Shelf-tag tiles: category stripe, mono SKU, oversized price. */
 export const ProductGrid = memo(function ProductGrid({ products, categories, onAdd, flashId }: Props) {
-  const money = useMoney();
   const colorOf = new Map(categories.map((c) => [c.id, c.color ?? '#A89F8C']));
 
   if (!products.length) {
@@ -40,19 +39,28 @@ export const ProductGrid = memo(function ProductGrid({ products, categories, onA
               )}
             >
               <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: p.categoryId ? colorOf.get(p.categoryId) : '#4A4438' }} />
-              <span className="font-mono text-[0.625rem] uppercase tracking-wider text-dust">{p.sku}</span>
-              <span className="mt-1 line-clamp-2 text-[0.95rem] font-medium leading-snug text-bone">{p.name}</span>
-              <span className="mt-auto flex items-end justify-between gap-2">
-                <span
-                  className={clsx('whitespace-nowrap font-mono text-2xs', out ? 'text-vermilion' : low ? 'text-amber' : 'text-dust')}
-                  title={`${p.stockQty} in stock`}
-                >
-                  {out ? 'OUT' : `${p.stockQty} left`}
+              {/* Top row: SKU · stock (swaps to "+ Add" on hover) */}
+              <span className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-mono text-[0.625rem] uppercase tracking-wider text-dust">{p.sku}</span>
+                <span className="relative shrink-0">
+                  <span
+                    className={clsx(
+                      'block whitespace-nowrap font-mono text-[0.625rem] uppercase tracking-wider transition-opacity duration-150 group-hover:opacity-0',
+                      out ? 'text-vermilion' : low ? 'text-amber' : 'text-dust',
+                    )}
+                    title={`${p.stockQty} in stock`}
+                  >
+                    {out ? 'Out' : `${p.stockQty} left`}
+                  </span>
+                  <span className="absolute right-0 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-amber px-2 py-0.5 font-mono text-[0.625rem] font-bold uppercase text-amber-ink opacity-0 transition-all duration-200 ease-snap group-hover:opacity-100 group-active:scale-110">
+                    + Add
+                  </span>
                 </span>
-                <span className="num text-xl font-medium text-bone transition-colors group-hover:text-amber">{money(p.priceCents)}</span>
               </span>
-              <span className="pointer-events-none absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-amber font-mono text-sm font-bold text-amber-ink opacity-0 transition-all duration-200 ease-snap group-hover:opacity-100 group-active:scale-125">
-                +
+              <span className="mt-1.5 line-clamp-2 text-[0.95rem] font-medium leading-snug text-bone">{p.name}</span>
+              {/* Price gets the full width of the tile and scales with its length */}
+              <span className="mt-auto block border-t border-dashed border-line pt-2">
+                <Price cents={p.priceCents} className="text-bone transition-colors group-hover:text-amber" />
               </span>
             </button>
           </li>

@@ -132,8 +132,52 @@ export function summarizeTenders(totalCents: number, tenders: TenderInput[]): Te
 
 // ─── Formatting ─────────────────────────────────────────────────────────────
 
+// `narrowSymbol` shows ₦ / ₹ / ₵ … instead of the ISO code when the locale
+// has no symbol of its own for that currency (e.g. NGN under en-US).
+const moneyFormatters = new Map<string, Intl.NumberFormat>();
+function moneyFormatter(currency: string, locale: string): Intl.NumberFormat {
+  const key = `${locale}|${currency}`;
+  let f = moneyFormatters.get(key);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat(locale, { style: 'currency', currency, currencyDisplay: 'narrowSymbol' });
+    } catch {
+      f = new Intl.NumberFormat(locale, { style: 'currency', currency }); // older runtimes
+    }
+    moneyFormatters.set(key, f);
+  }
+  return f;
+}
+
 export function formatMoney(cents: number, currency = 'USD', locale = 'en-US'): string {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
+  return moneyFormatter(currency, locale).format(cents / 100);
+}
+
+/**
+ * Splits a price for typographic display: "₦1,250,000.50" →
+ * { symbol: "₦", whole: "1,250,000", fraction: ".50", symbolFirst: true }.
+ */
+export function moneyParts(cents: number, currency = 'USD', locale = 'en-US') {
+  const parts = moneyFormatter(currency, locale).formatToParts(cents / 100);
+  const symbolIdx = parts.findIndex((p) => p.type === 'currency');
+  const firstNumIdx = parts.findIndex((p) => p.type === 'integer');
+  let whole = '';
+  let fraction = '';
+  for (const p of parts) {
+    if (p.type === 'minusSign' || p.type === 'integer' || p.type === 'group') whole += p.value;
+    else if (p.type === 'decimal' || p.type === 'fraction') fraction += p.value;
+  }
+  return {
+    symbol: symbolIdx >= 0 ? parts[symbolIdx].value : currency,
+    whole,
+    fraction,
+    symbolFirst: symbolIdx < firstNumIdx,
+  };
+}
+
+/** Just the symbol, e.g. "₦" for NGN — for input adornments and labels. */
+export function currencySymbol(currency = 'USD', locale = 'en-US'): string {
+  return moneyFormatter(currency, locale).formatToParts(0).find((p) => p.type === 'currency')?.value ?? currency;
 }
 
 export function formatBps(bps: number): string {

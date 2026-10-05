@@ -1,5 +1,16 @@
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import { formatMoney, PAYMENT_LABEL, type ReportSummary, type StoreSettings } from '@sync-retail/shared';
+
+// PDFKit's built-in fonts are WinAnsi-only (no ₦, ₹, ₵, ₱ …), so embed
+// DejaVu, which covers every currency symbol. Fonts are subset per document.
+const FONT_DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('dejavu-fonts-ttf/package.json')), 'ttf');
+const FONTS = {
+  regular: path.join(FONT_DIR, 'DejaVuSans.ttf'),
+  bold: path.join(FONT_DIR, 'DejaVuSans-Bold.ttf'),
+  display: path.join(FONT_DIR, 'DejaVuSerif-Italic.ttf'),
+};
 
 const INK = '#16140F';
 const MUTED = '#6B6455';
@@ -12,16 +23,19 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
   const doc = new PDFDocument({ size: 'A4', margin: 48, info: { Title: `${settings.storeName} sales report` } });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
+  doc.registerFont('Sans', FONTS.regular);
+  doc.registerFont('Sans-Bold', FONTS.bold);
+  doc.registerFont('Display', FONTS.display);
 
   const left = doc.page.margins.left;
   const width = doc.page.width - left - doc.page.margins.right;
 
   // Masthead
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(ACCENT).text(settings.storeName.toUpperCase(), { characterSpacing: 2 });
+  doc.font('Sans-Bold').fontSize(9).fillColor(ACCENT).text(settings.storeName.toUpperCase(), { characterSpacing: 2 });
   doc.moveDown(0.3);
-  doc.font('Times-Italic').fontSize(30).fillColor(INK).text('Sales report');
+  doc.font('Display').fontSize(30).fillColor(INK).text('Sales report');
   doc
-    .font('Helvetica')
+    .font('Sans')
     .fontSize(10)
     .fillColor(MUTED)
     .text(`${r.range.from.slice(0, 10)}  →  ${r.range.to.slice(0, 10)}   ·   by ${r.range.granularity}`);
@@ -39,13 +53,13 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
   const colW = width / kpis.length;
   const kpiY = doc.y + 8;
   kpis.forEach(([label, value], i) => {
-    doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(label.toUpperCase(), left + i * colW, kpiY, { width: colW, characterSpacing: 1 });
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text(value, left + i * colW, kpiY + 14, { width: colW });
+    doc.font('Sans').fontSize(8).fillColor(MUTED).text(label.toUpperCase(), left + i * colW, kpiY, { width: colW, characterSpacing: 1 });
+    doc.font('Sans-Bold').fontSize(16).fillColor(INK).text(value, left + i * colW, kpiY + 14, { width: colW });
   });
   doc.y = kpiY + 44;
   doc.x = left;
   doc
-    .font('Helvetica')
+    .font('Sans')
     .fontSize(9)
     .fillColor(MUTED)
     .text(`Gross ${fmt(t.grossCents)} · Refunds ${fmt(t.refundedCents)} · Tax ${fmt(t.taxCents)} · Discounts ${fmt(t.discountCents)} · Items ${t.itemsSold}`);
@@ -75,7 +89,7 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
   table('Staff performance', ['Name', 'Sales', 'Net', 'Avg', 'Voids', 'Overr.'], [0.3, 0.1, 0.2, 0.2, 0.1, 0.1],
     r.workers.map((w) => [w.name, String(w.transactions), fmt(w.revenueCents), fmt(w.averageTicketCents), String(w.voids), String(w.overrides)]));
 
-  doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(`Generated ${new Date().toISOString()}`, left, doc.page.height - 40, { lineBreak: false });
+  doc.font('Sans').fontSize(8).fillColor(MUTED).text(`Generated ${new Date().toISOString()}`, left, doc.page.height - 40, { lineBreak: false });
   doc.end();
 
   return new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
@@ -86,7 +100,7 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
   }
   function section(title: string) {
     if (doc.y > doc.page.height - 160) doc.addPage();
-    doc.font('Times-Italic').fontSize(15).fillColor(INK).text(title, left);
+    doc.font('Display').fontSize(15).fillColor(INK).text(title, left);
     doc.moveDown(0.3);
   }
   function table(title: string, headers: string[], ratios: number[], rows: string[][]) {
@@ -96,7 +110,7 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
       let x = left;
       cells.forEach((cell, i) => {
         const w = ratios[i] * width;
-        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(color)
+        doc.font(bold ? 'Sans-Bold' : 'Sans').fontSize(9).fillColor(color)
           .text(cell, x, y, { width: w - 6, align: i === 0 ? 'left' : 'right', lineBreak: false, ellipsis: true });
         x += w;
       });

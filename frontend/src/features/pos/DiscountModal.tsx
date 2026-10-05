@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { effectiveDiscountBps, formatBps, priceLine, type DiscountType, type LineDiscount } from '@sync-retail/shared';
 import { Modal } from '@/components/ui/Modal';
 import { Button, Segmented } from '@/components/ui/primitives';
-import { useMoney } from '@/lib/format';
+import { useCurrencySymbol, useMoney } from '@/lib/format';
 import { useSettings } from '@/hooks/useSettings';
 import { useCan } from '@/hooks/useOverride';
 import type { CartLine } from '@/store/cart';
@@ -15,6 +15,7 @@ interface Props {
 
 export function DiscountModal({ line, onClose, onApply }: Props) {
   const money = useMoney();
+  const symbol = useCurrencySymbol();
   const can = useCan();
   const { data: settings } = useSettings();
   const [type, setType] = useState<DiscountType>('PERCENT');
@@ -79,7 +80,7 @@ export function DiscountModal({ line, onClose, onApply }: Props) {
             aria-label={type === 'PERCENT' ? 'Percent off' : 'Amount off'}
             placeholder="0"
           />
-          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xl text-dust">{type === 'PERCENT' ? '%' : '$'}</span>
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xl text-dust">{type === 'PERCENT' ? '%' : symbol}</span>
         </div>
         {type === 'PERCENT' && (
           <div className="flex flex-wrap gap-2">

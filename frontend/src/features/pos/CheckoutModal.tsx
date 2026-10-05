@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/primitives';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { centsToInput, inputToCents, useMoney } from '@/lib/format';
+import { fitClass } from '@/components/ui/Price';
 import { useSettings } from '@/hooks/useSettings';
 
 interface Props {
@@ -113,7 +114,15 @@ export function CheckoutModal({ open, totalCents, customer, onClose, onProgress,
         <div className="flex flex-col">
           <div className="rounded-sm border border-line bg-ink p-5">
             <p className="eyebrow">{done ? 'Paid in full' : 'Amount due'}</p>
-            <p className={clsx('display mt-1 text-6xl leading-none transition-colors', done ? 'text-mint' : 'text-bone')}>{money(remaining)}</p>
+            <p
+              className={clsx(
+                'display mt-1 whitespace-nowrap leading-none transition-colors',
+                fitClass(money(remaining), [[10, 'text-6xl'], [13, 'text-5xl'], [16, 'text-4xl']], 'text-3xl'),
+                done ? 'text-mint' : 'text-bone',
+              )}
+            >
+              {money(remaining)}
+            </p>
             <p className="num mt-2 text-sm text-dust">of {money(totalCents)}</p>
             {summary.changeCents > 0 && (
               <div className="mt-4 flex items-center justify-between rounded-sm bg-amber px-3 py-2 text-amber-ink animate-pop">
