@@ -5,12 +5,16 @@ import { formatMoney, PAYMENT_LABEL, type ReportSummary, type StoreSettings } fr
 
 // PDFKit's built-in fonts are WinAnsi-only (no ₦, ₹, ₵, ₱ …), so embed
 // DejaVu, which covers every currency symbol. Fonts are subset per document.
-const FONT_DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('dejavu-fonts-ttf/package.json')), 'ttf');
-const FONTS = {
-  regular: path.join(FONT_DIR, 'DejaVuSans.ttf'),
-  bold: path.join(FONT_DIR, 'DejaVuSans-Bold.ttf'),
-  display: path.join(FONT_DIR, 'DejaVuSerif-Italic.ttf'),
-};
+// SR_FONT_DIR is set by the bundled desktop host, where node_modules doesn't exist.
+function fonts() {
+  const dir =
+    process.env.SR_FONT_DIR ?? path.join(path.dirname(createRequire(import.meta.url).resolve('dejavu-fonts-ttf/package.json')), 'ttf');
+  return {
+    regular: path.join(dir, 'DejaVuSans.ttf'),
+    bold: path.join(dir, 'DejaVuSans-Bold.ttf'),
+    display: path.join(dir, 'DejaVuSerif-Italic.ttf'),
+  };
+}
 
 const INK = '#16140F';
 const MUTED = '#6B6455';
@@ -20,7 +24,9 @@ const RULE = '#D9D1BF';
 /** Renders the report summary as a printable A4 PDF and returns the bytes. */
 export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<Buffer> {
   const fmt = (c: number) => formatMoney(c, settings.currency, settings.locale);
-  const doc = new PDFDocument({ size: 'A4', margin: 48, info: { Title: `${settings.storeName} sales report` } });
+  const FONTS = fonts();
+  // Passing `font` keeps PDFKit from loading its built-in Helvetica AFM files.
+  const doc = new PDFDocument({ size: 'A4', margin: 48, font: FONTS.regular, info: { Title: `${settings.storeName} sales report` } });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
   doc.registerFont('Sans', FONTS.regular);

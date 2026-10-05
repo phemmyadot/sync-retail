@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "build:host": "node scripts/build-host.mjs"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"
@@ -29,6 +30,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
     "pdfkit": "^0.17.1",
+    "pg": "^8.23.1",
     "ws": "^8.18.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.25.0"
@@ -41,10 +43,15 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^22.15.0",
     "@types/pdfkit": "^0.14.0",
+    "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1",
+    "postject": "^1.0.0-alpha.6",
     "prisma": "^6.16.0",
     "tsup": "^8.5.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"
+  },
+  "optionalDependencies": {
+    "@embedded-postgres/windows-x64": "^17.5.0-beta.15"
   }
 }

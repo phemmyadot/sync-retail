@@ -1,4 +1,4 @@
-import { API_URL } from './config';
+import { getApiBase } from './config';
 import { useAuth } from '@/store/auth';
 
 export class ApiError extends Error {
@@ -29,7 +29,7 @@ interface Options {
 }
 
 function buildUrl(path: string, query?: Options['query']) {
-  const url = `${API_URL}/api${path}`;
+  const url = `${getApiBase()}/api${path}`;
   if (!query) return url;
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));

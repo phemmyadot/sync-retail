@@ -4,3 +4,6 @@ dist
 *.log
 frontend/src-tauri/target
 frontend/src-tauri/gen
+backend/build
+frontend/src-tauri/binaries
+frontend/src-tauri/resources/host

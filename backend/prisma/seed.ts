@@ -10,8 +10,7 @@ import { PrismaClient, type PaymentMethod, type Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { DEFAULT_SETTINGS, pointsEarned, priceCart } from '@sync-retail/shared';
 import { randomUUID } from 'node:crypto';
-
-const prisma = new PrismaClient();
+import { pathToFileURL } from 'node:url';
 
 // Deterministic PRNG so every seed produces the same demo store.
 let seed = 42;
@@ -63,9 +62,10 @@ const PRODUCTS: [string, string, number, number, number][] = [
 const FIRST = ['Ada', 'Bola', 'Chen', 'Dami', 'Elena', 'Femi', 'Grace', 'Hiro', 'Ife', 'Jonas', 'Kemi', 'Luca', 'Maya', 'Nia', 'Omar', 'Priya', 'Quinn', 'Rosa', 'Sade', 'Tomás'];
 const LAST = ['Adeyemi', 'Brooks', 'Carter', 'Diaz', 'Eze', 'Fischer', 'Gupta', 'Hassan', 'Ito', 'Johnson', 'Okafor', 'Novak'];
 
-async function main() {
-  // Container start-up passes --if-empty so restarts never wipe real data.
-  if (process.argv.includes('--if-empty') && (await prisma.user.count()) > 0) {
+/** Wipes and reloads demo data. With `ifEmpty`, does nothing when users already exist. */
+export async function seedDemo(prisma: PrismaClient, opts: { ifEmpty?: boolean } = {}) {
+  seed = 42;
+  if (opts.ifEmpty && (await prisma.user.count()) > 0) {
     console.log('Database already has data — skipping demo seed.');
     return;
   }
@@ -217,9 +217,13 @@ async function main() {
   console.log(`✔ Seeded ${products.length} products, ${customers.length} customers, ${receipt - 1000} sales.`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// CLI: `tsx prisma/seed.ts [--if-empty]` (Docker passes --if-empty so restarts never wipe data).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const prisma = new PrismaClient();
+  seedDemo(prisma, { ifEmpty: process.argv.includes('--if-empty') })
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
