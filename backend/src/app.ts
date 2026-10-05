@@ -14,6 +14,8 @@ import { overridesRouter } from './routes/overrides';
 import { reportsRouter } from './routes/reports';
 import { importRouter } from './routes/imports';
 import { auditRouter, publicSettings, settingsRouter, syncRouter } from './routes/misc';
+import { setupRouter } from './routes/setup';
+import { diagnosticsRouter } from './routes/diagnostics';
 
 export function createApp() {
   const app = express();
@@ -30,6 +32,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   // Login-free screens (lock screen, customer display) need currency + branding.
   app.get('/api/settings/public', publicSettings);
+  app.use('/api/setup', setupRouter);
 
   const api = express.Router();
   api.use(authenticate);
@@ -44,6 +47,7 @@ export function createApp() {
   api.use('/settings', settingsRouter);
   api.use('/audit', requirePermission('audit:read'), auditRouter);
   api.use('/sync', syncRouter);
+  api.use('/admin/diagnostics', requirePermission('users:manage'), diagnosticsRouter);
   app.use('/api', api);
 
   app.use((_req, _res) => {

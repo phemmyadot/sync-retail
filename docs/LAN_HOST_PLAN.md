@@ -1,6 +1,6 @@
 # Sync Retail — Local-Network Host Mode & Google Drive Backup
 
-**Implementation plan · v1 · 2026-10-05**
+**Implementation plan · v1.1 · 2026-10-05** — updated after milestone M1
 
 This plan turns Sync Retail from a cloud-hosted POS into one that can also run entirely on a store's own Windows PCs:
 
@@ -17,9 +17,11 @@ The existing cloud/Docker deployment stays as a second deployment mode. Both mod
 | Area | State |
 |---|---|
 | Feasibility | **Confirmed.** The riskiest piece (desktop app ⇒ bundled API ⇒ embedded Postgres on Windows) is built and tested end to end. |
-| POC code | On `main` (uncommitted at time of writing). See §2.2. |
-| Remaining build | Pairing/discovery, setup wizard, Drive backup/restore, signing/installer hardening. About 5 weeks for one engineer (§12). |
-| Blocking decisions | 3 product decisions in §14. None block starting milestone M1. |
+| M0 · POC | **Done.** Commit `f9405cf`. See §2. |
+| M1 · Host mode | **Done.** A fresh PC installs per-machine, runs the setup wizard (no demo data), confirms a recovery key and makes its first sale. See §2.6. |
+| Remaining build | M2 pairing/discovery → M3 Drive backup → M4 restore → M5 signing and release. About 5 weeks for one engineer (§12). |
+| Open decisions | 3 in §14 (pairing code length, nightly backups, platforms). Recovery model and install scope are settled (§14). |
+| Start now (long lead time) | Code-signing certificate (needed by M5) · Google Cloud OAuth consent screen + brand verification (needed by M3; Google review takes 1–3 weeks). |
 
 ---
 
@@ -98,6 +100,58 @@ Test-tooling findings, recorded so nobody chases them again:
 - Code signing. `sr-host.exe` currently carries Node's now-invalid signature; the build prints "signature seems corrupted".
 - Windows Firewall behaviour. Listening on `0.0.0.0` triggers the "Allow access" prompt on first run.
 - macOS/Linux builds.
+
+### 2.6 Milestone M1 — delivered
+
+**What a store owner now sees on a fresh PC**
+
+1. **Install:** a per-machine NSIS installer (one UAC prompt) to `C:\Program Files\Sync Retail`. It adds the firewall rule *Sync Retail Host*: inbound, allow, **Private + Domain profiles only**, program `sr-host.exe`. The rule is removed on uninstall.
+2. **Role chooser:** "How will this PC be used?" offers **Main Register**. *Connect to Main Register* (M2) and *Restore from backup* (M4) are shown but disabled. No host process runs until a role is chosen.
+3. **Main Register:** the private database is provisioned, and the wizard opens in **3.7 s**.
+4. **Store:** name and currency (12 common currencies; NGN preselected with locale `en-NG`), with a live price preview (`₦1,250,000.00`).
+5. **Owner account:** name, email, password (8+), PIN (4–8 digits); both are confirmed.
+6. **Security:** optional restore passphrase (12+ characters).
+7. **Recovery key:** 13 groups of 4 Base32 characters on a printable sheet, with *Print* and *Save as text file*. *Open the register* stays locked until the owner types back two randomly chosen groups and ticks "I've stored it".
+8. **Signed in as owner** on an empty register. No demo data.
+
+**Code added in M1**
+
+```
+backend/src/services/backupKey.ts   BK generation, recovery-key Base32 format/parse (tolerates 0/O, 1/I),
+                                    scrypt(N=2^17)+AES-256-GCM passphrase wrap, stored as Setting `backup.key`
+backend/src/routes/setup.ts         GET /api/setup/status · POST /api/setup (only while 0 users; loopback-only
+                                    unless SETUP_ALLOW_REMOTE=true; advisory lock prevents double setup)
+backend/src/routes/diagnostics.ts   GET /api/admin/diagnostics — text report, credentials redacted
+backend/src/host/{config,runtime}.ts  API port remembered in host.json; next free port if taken;
+                                    no demo seed by default; READY reports needsSetup; host env for the API
+frontend/src-tauri/src/mode.rs      mode.json + commands app_mode / configure_host
+frontend/src-tauri/src/host.rs      NotConfigured state, --app-version, keep-system-awake (ES_SYSTEM_REQUIRED)
+frontend/src-tauri/windows/installer-hooks.nsh   firewall rule add/remove
+frontend/src/features/setup/        RoleChooser, SetupWizard (+ recovery key step), SetupGate (desktop + web)
+frontend/src/features/admin/        Admin → System tab: install info + "Download diagnostics"
+.gitattributes                      *.sql eol=lf (migration checksums stay stable across checkouts)
+docker-compose.yml                  SETUP_ALLOW_REMOTE (fresh server installs without demo data)
+```
+
+**Verification**
+
+| Suite | Result |
+|---|---|
+| Recovery-key crypto (200 random round trips, look-alikes, truncation, wrong passphrase, tampering) | 7 / 7 pass; scrypt wrap ≈ 240 ms |
+| `sr-host.exe` M1 checks | **18 / 18 pass**. They cover:<br>• port 47810 taken → 47811 used and remembered after restart<br>• no demo data<br>• setup refused from the LAN address (403) and allowed on loopback<br>• invalid PIN rejected (400); second setup refused (409)<br>• owner PIN login<br>• diagnostics contain no PG password, JWT secret, recovery key, owner password or passphrase |
+| Installed-app end-to-end (per-machine build) | **20 / 20 pass**. They cover:<br>• role chooser → wizard → recovery-key confirmation (wrong group rejected)<br>• owner signed in; empty catalog<br>• first product, then first sale ₦85,000 + 7.5% VAT = ₦91,375.00, stored online<br>• diagnostics report<br>• clean quit in 1.1 s<br>• relaunch goes straight to the lock screen |
+| Firewall rule after install | Present: In / Allow / Domain,Private / `C:\Program Files\Sync Retail\sr-host.exe` |
+| Docker deployment after M1 | Unchanged store; `/api/setup` refused through nginx (403); diagnostics report says "Server (cloud/Docker)" |
+
+**Not verified in M1**
+
+- **Sleep prevention.** `powercfg /requests` needs an elevated prompt. To check manually: run it as admin while the app is open; it should list `sync-retail.exe` under SYSTEM.
+- **Code signing.** Still M5.
+
+**Changes from the original plan**
+
+- **Where the Backup Key lives:** in the `Setting` table rather than Windows Credential Manager. Both the API (for backups, M3) and a restored host (M4) can then read it without an extra Rust↔Node channel. Postgres is loopback-only with a random password, and backups are encrypted with this key, so including it in the backup leaks nothing. DPAPI/Credential Manager hardening is a candidate for M5.
+- **Data folder:** stays per Windows user (`%LOCALAPPDATA%\dev.syncretail.pos`) even with a per-machine install. Fine for the usual single-account till PC. If shops share one PC across Windows accounts, move it to `%ProgramData%` (M5 decision).
 
 ---
 
@@ -439,7 +493,7 @@ Estimates are for one experienced engineer. *Done when* items are acceptance cri
 | # | Milestone | Scope | Estimate | Done when |
 |---|---|---|---|---|
 | **M0** | **POC** | §2 | **done** | Installed app sells end to end on Windows; clean shutdown under quit and kill |
-| M1 | Host mode, production-ready | Setup wizard (host path), owner account instead of demo seed, recovery key, port conflict handling, sleep prevention, installer firewall rule, per-machine install, logs/diagnostics export | 1 wk | A fresh PC runs setup and makes a first sale without seeing demo data; installer adds the firewall rule |
+| **M1** | **Host mode, production-ready** | Setup wizard (host path), owner account instead of demo seed, recovery key, port conflict handling, sleep prevention, installer firewall rule, per-machine install, logs/diagnostics export | **done** (§2.6) | A fresh PC runs setup and makes a first sale without seeing demo data; installer adds the firewall rule ✔ |
 | M2 | Discovery and pairing | `network/*`, `Device` model, device middleware, `discovery.rs`, client wizard, devices panel, mode switching, IP-change handling | 1.5 wk | 3 client PCs pair via code in under 30 s each; revoking blocks a register immediately; host IP change self-heals |
 | M3 | Backup to Drive | `pg_dump` bundling, SRBK crypto, Drive OAuth + resumable upload, queue, scheduler, retention, dashboard | 1.5 wk | Manual and nightly backups land in `SyncRetail_Backups`; offline backups upload after reconnect; tamper tests fail closed |
 | M4 | Restore | Restore wizard, version guards, identity carry-over, client auto-reconnect, outbox replay | 1 wk | Drill: kill host VM → restore on a new VM → all registers resume without re-pairing; totals reconcile |
@@ -469,6 +523,6 @@ Estimates are for one experienced engineer. *Done when* items are acceptance cri
 
 1. **Pairing code length:** accept 6 digits (D5), or must it stay at 4? With 4, the TTL and attempt limits become mandatory.
 2. **Automatic backups:** the spec asks only for a manual end-of-day trigger. Approve adding an automatic nightly backup (recommended), and choose a default time.
-3. **Recovery model:** recovery key sheet only, or also allow a passphrase (D7)? A passphrase is friendlier but weaker if it's short.
-4. **Install scope:** per-machine install (needs admin once) for production, as recommended in §10.2?
+3. ~~**Recovery model**~~ — **settled in M1:** recovery key sheet always, plus an *optional* passphrase (12+ characters, scrypt N=2^17).
+4. ~~**Install scope**~~ — **settled in M1:** per-machine install (one UAC prompt); it adds the firewall rule.
 5. **Platforms:** is Windows-only acceptable for v1, with macOS later?

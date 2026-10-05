@@ -14,20 +14,26 @@ export interface HostConfig {
   createdAt: string;
   pg: { port: number; user: string; password: string; database: string };
   jwtSecret: string;
+  /** Last API port used; kept stable so registers can reconnect after a restart. */
+  apiPort?: number;
 }
 
 const secret = (bytes: number) => randomBytes(bytes).toString('base64url');
 
-/** Finds a free TCP port on loopback, starting from `preferred`. */
-export async function freePort(preferred: number, attempts = 50): Promise<number> {
-  for (let p = preferred; p < preferred + attempts; p++) {
-    const ok = await new Promise<boolean>((resolve) => {
-      const srv = net.createServer().once('error', () => resolve(false)).once('listening', () => srv.close(() => resolve(true)));
-      srv.listen(p, '127.0.0.1');
-    });
-    if (ok) return p;
-  }
+export const portIsFree = (port: number, host = '127.0.0.1') =>
+  new Promise<boolean>((resolve) => {
+    const srv = net.createServer().once('error', () => resolve(false)).once('listening', () => srv.close(() => resolve(true)));
+    srv.listen(port, host);
+  });
+
+/** Finds a free TCP port starting from `preferred` (on `host`, loopback by default). */
+export async function freePort(preferred: number, attempts = 50, host = '127.0.0.1'): Promise<number> {
+  for (let p = preferred; p < preferred + attempts; p++) if (await portIsFree(p, host)) return p;
   throw new Error(`No free port in ${preferred}-${preferred + attempts}`);
+}
+
+export function saveConfig(dataDir: string, config: HostConfig) {
+  fs.writeFileSync(path.join(dataDir, 'host.json'), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 export async function loadOrCreateConfig(dataDir: string): Promise<{ config: HostConfig; created: boolean }> {

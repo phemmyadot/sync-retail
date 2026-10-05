@@ -23,8 +23,10 @@ pub const API_PORT: u16 = 47800;
 #[derive(Clone, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum HostStatus {
+    /// This PC hasn't been set up yet (no mode.json) — the UI shows the setup wizard.
+    NotConfigured,
     Starting,
-    Ready { api_base: String, store_id: String, first_launch: bool },
+    Ready { api_base: String, store_id: String, first_launch: bool, needs_setup: bool },
     Failed { message: String, log_dir: String },
 }
 
@@ -41,11 +43,11 @@ pub struct HostState {
 
 impl HostState {
     pub fn new() -> Self {
-        Self { status: Mutex::new(HostStatus::Starting), proc: Mutex::new(Proc::default()) }
+        Self { status: Mutex::new(HostStatus::NotConfigured), proc: Mutex::new(Proc::default()) }
     }
 }
 
-fn set_status(app: &AppHandle, status: HostStatus) {
+pub fn set_status(app: &AppHandle, status: HostStatus) {
     *app.state::<HostState>().status.lock().unwrap() = status.clone();
     let _ = app.emit("host-status", status);
 }
@@ -57,6 +59,8 @@ fn sidecar_path() -> std::io::Result<PathBuf> {
 }
 
 pub fn start(app: &AppHandle) {
+    set_status(app, HostStatus::Starting);
+    keep_system_awake();
     let fail = |app: &AppHandle, msg: String, log_dir: String| set_status(app, HostStatus::Failed { message: msg, log_dir });
 
     let data_dir = match app.path().app_local_data_dir() {
@@ -78,8 +82,7 @@ pub fn start(app: &AppHandle) {
     cmd.arg("--data-dir").arg(&data_dir)
         .arg("--resources").arg(&resources)
         .arg("--port").arg(API_PORT.to_string())
-        // POC: load the demo store on first launch. The setup wizard replaces this.
-        .arg("--seed-demo")
+        .arg("--app-version").arg(app.package_info().version.to_string())
         .arg("--watch-stdin")
         .arg("--parent-pid").arg(std::process::id().to_string())
         .stdin(Stdio::piped())
@@ -111,6 +114,7 @@ pub fn start(app: &AppHandle) {
                     api_base: format!("http://127.0.0.1:{port}"),
                     store_id: v["storeId"].as_str().unwrap_or_default().to_string(),
                     first_launch: v["firstLaunch"].as_bool().unwrap_or(false),
+                    needs_setup: v["needsSetup"].as_bool().unwrap_or(false),
                 });
             } else if let Some(json) = line.strip_prefix("SR_HOST_FAILED ") {
                 let v: serde_json::Value = serde_json::from_str(json).unwrap_or_default();
@@ -149,4 +153,28 @@ pub fn stop(app: &AppHandle) {
 #[tauri::command]
 pub fn host_status(state: State<'_, HostState>) -> HostStatus {
     state.status.lock().unwrap().clone()
+}
+
+/// The Main Register must not fall asleep while other registers depend on it.
+/// The display may still turn off. Held by a parked thread for the app's lifetime.
+fn keep_system_awake() {
+    #[cfg(windows)]
+    {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            std::thread::spawn(|| {
+                #[link(name = "kernel32")]
+                extern "system" {
+                    fn SetThreadExecutionState(flags: u32) -> u32;
+                }
+                const ES_CONTINUOUS: u32 = 0x8000_0000;
+                const ES_SYSTEM_REQUIRED: u32 = 0x0000_0001;
+                unsafe { SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) };
+                loop {
+                    std::thread::park();
+                }
+            });
+        });
+    }
 }

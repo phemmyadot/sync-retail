@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { BANNER_TOKENS, fillBannerText, formatBps, ROLE_LABEL, ROLES, type Role, type StoreSettings } from '@sync-retail/shared';
-import { api, errorMessage } from '@/lib/api';
+import { api, download, errorMessage } from '@/lib/api';
+import { IS_TAURI } from '@/lib/config';
 import { centsToInput, fmtDay, inputToCents, useCurrencySymbol, useMoney } from '@/lib/format';
 import { useAuth } from '@/store/auth';
 import { toast } from '@/store/toast';
@@ -22,7 +23,7 @@ interface StaffUser {
 const SWATCHES = ['#FFB547', '#8BE28B', '#6FC9F2', '#E7A6F0', '#F28C6B', '#D9D1BF'];
 
 export function AdminPage() {
-  const [tab, setTab] = useState<'staff' | 'store'>('staff');
+  const [tab, setTab] = useState<'staff' | 'store' | 'system'>('staff');
   return (
     <div className="pb-16">
       <PageHeader eyebrow="Administration" title={<>Back <span className="italic text-dust">office</span></>}>
@@ -32,10 +33,11 @@ export function AdminPage() {
           options={[
             { value: 'staff', label: 'Staff & PINs' },
             { value: 'store', label: 'Store & loyalty' },
+            { value: 'system', label: 'System' },
           ]}
         />
       </PageHeader>
-      {tab === 'staff' ? <StaffTab /> : <StoreTab />}
+      {tab === 'staff' ? <StaffTab /> : tab === 'store' ? <StoreTab /> : <SystemTab />}
     </div>
   );
 }
@@ -285,3 +287,55 @@ function StoreTab() {
     </form>
   );
 }
+
+function SystemTab() {
+  const [busy, setBusy] = useState(false);
+  const [host, setHost] = useState<{ storeId?: string; apiBase?: string } | null>(null);
+
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    void import('@tauri-apps/api/core').then(({ invoke }) => invoke<{ storeId?: string; apiBase?: string }>('host_status').then(setHost));
+  }, []);
+
+  const exportDiagnostics = async () => {
+    setBusy(true);
+    try {
+      await download('/admin/diagnostics');
+      toast.success('Diagnostics saved', 'Send this file to support. It contains no passwords or keys.');
+    } catch (err) {
+      toast.error('Could not create diagnostics', errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-10 px-6 py-8 lg:grid-cols-2 lg:px-10">
+      <section className="space-y-4">
+        <h2 className="display text-3xl">This installation</h2>
+        <dl className="divide-y divide-line border-y border-line text-sm">
+          <Row k="Mode" v={IS_TAURI ? 'Main Register (desktop host)' : 'Server (web)'} />
+          {host?.storeId && <Row k="Store ID" v={host.storeId} mono />}
+          {host?.apiBase && <Row k="Local API" v={host.apiBase} mono />}
+        </dl>
+      </section>
+      <section className="space-y-4">
+        <h2 className="display text-3xl">Diagnostics</h2>
+        <p className="text-dust">
+          A text report for support: versions, record counts, migrations, network addresses and recent logs. Passwords, tokens and the recovery key are never
+          included.
+        </p>
+        <Button variant="primary" icon="download" loading={busy} onClick={() => void exportDiagnostics()}>
+          Download diagnostics
+        </Button>
+      </section>
+    </div>
+  );
+}
+
+const Row = ({ k, v, mono }: { k: string; v: string; mono?: boolean }) => (
+  <div className="flex items-center justify-between gap-4 py-2.5">
+    <dt className="text-dust">{k}</dt>
+    <dd className={clsx('text-right text-bone', mono && 'num text-xs')}>{v}</dd>
+  </div>
+);

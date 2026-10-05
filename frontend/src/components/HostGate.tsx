@@ -3,15 +3,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { setApiBase } from '@/lib/config';
 import { Icon } from './ui/Icon';
+import { RoleChooser } from '@/features/setup/RoleChooser';
 
 type HostStatus =
+  | { state: 'notConfigured' }
   | { state: 'starting' }
-  | { state: 'ready'; apiBase: string; storeId: string; firstLaunch: boolean }
+  | { state: 'ready'; apiBase: string; storeId: string; firstLaunch: boolean; needsSetup: boolean }
   | { state: 'failed'; message: string; logDir: string };
 
 /**
- * Desktop only: holds the UI until the bundled host (API + local database)
- * reports ready, then points the API client at it.
+ * Desktop only. On a brand-new PC asks what role it plays; on the Main
+ * Register holds the UI until the bundled host (API + local database) reports
+ * ready, then points the API client at it.
  */
 export function HostGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<HostStatus>({ state: 'starting' });
@@ -38,6 +41,17 @@ export function HostGate({ children }: { children: ReactNode }) {
   }, []);
 
   if (status.state === 'ready') return <>{children}</>;
+
+  if (status.state === 'notConfigured') {
+    return (
+      <RoleChooser
+        onHost={async () => {
+          setStatus({ state: 'starting' });
+          await invoke('configure_host');
+        }}
+      />
+    );
+  }
 
   if (status.state === 'failed') {
     return (

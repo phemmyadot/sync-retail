@@ -2,7 +2,8 @@
  * Sync Retail host runtime — the process the desktop app launches on the
  * "Main Register" PC. Compiled into a single executable (sr-host.exe).
  *
- *   sr-host --data-dir <dir> --resources <dir> [--port 47800] [--seed-demo] [--watch-stdin]
+ *   sr-host --data-dir <dir> --resources <dir> [--port 47800] [--app-version x.y.z]
+ *           [--watch-stdin] [--parent-pid <pid>] [--seed-demo]   (demo data: development only)
  *
  * 1. loads/creates host identity + secrets   (<data-dir>/host.json)
  * 2. initialises/starts a private Postgres   (<data-dir>/pgdata, loopback only)
@@ -21,12 +22,14 @@ import path from 'node:path';
 import type { Server } from 'node:http';
 import { LocalPostgres } from '../db/localPostgres';
 import { migrateDeploy } from '../db/migrate';
-import { loadOrCreateConfig } from './config';
+import { freePort, loadOrCreateConfig, portIsFree, saveConfig } from './config';
 
 interface Args {
   dataDir: string;
   resources: string;
+  /** Preferred API port; if taken, the next free one is used and remembered. */
   port: number;
+  appVersion: string;
   seedDemo: boolean;
   watchStdin: boolean;
   parentPid?: number;
@@ -50,6 +53,7 @@ function parseArgs(argv: string[]): Args {
     dataDir: path.resolve(get('--data-dir') ?? path.join(process.env.LOCALAPPDATA ?? exeDir, 'SyncRetail')),
     resources: path.resolve(get('--resources') ?? path.join(exeDir, 'host')),
     port: Number(get('--port') ?? 47800),
+    appVersion: get('--app-version') ?? 'dev',
     seedDemo: argv.includes('--seed-demo'),
     watchStdin: argv.includes('--watch-stdin'),
     parentPid: get('--parent-pid') ? Number(get('--parent-pid')) : undefined,
@@ -136,16 +140,26 @@ async function main() {
     const m = await migrateDeploy(databaseUrl, path.join(args.resources, 'migrations'), log);
     log(`migrations: ${m.applied} applied, ${m.total} total`);
 
+    // Port: keep the one registers already know; move only if something else took it.
+    const wanted = config.apiPort ?? args.port;
+    const apiPort = (await portIsFree(wanted, '0.0.0.0')) ? wanted : await freePort(wanted + 1, 50, '0.0.0.0');
+    if (apiPort !== wanted) log(`port ${wanted} is in use — using ${apiPort}`);
+    if (config.apiPort !== apiPort) saveConfig(args.dataDir, { ...config, apiPort });
+
     // The API reads its configuration from the environment at import time,
     // so set it before the (lazily bundled) app modules are loaded.
     Object.assign(process.env, {
       NODE_ENV: 'production',
       DATABASE_URL: databaseUrl,
       JWT_SECRET: config.jwtSecret,
-      PORT: String(args.port),
+      PORT: String(apiPort),
       CORS_ORIGIN: 'http://tauri.localhost,https://tauri.localhost,tauri://localhost,http://localhost:5173',
       PRISMA_QUERY_ENGINE_LIBRARY: path.join(args.resources, 'prisma', 'query_engine-windows.dll.node'),
       SR_FONT_DIR: path.join(args.resources, 'fonts'),
+      SR_HOST_MODE: '1',
+      SR_LOG_DIR: logDir,
+      SR_STORE_ID: config.storeId,
+      SR_APP_VERSION: args.appVersion,
     });
 
     const [{ createApp }, { attachDisplayRelay }, { prisma }] = await Promise.all([
@@ -165,11 +179,12 @@ async function main() {
     attachDisplayRelay(server);
     await new Promise<void>((resolve, reject) => {
       server!.once('error', reject);
-      server!.listen(args.port, '0.0.0.0', () => resolve());
+      server!.listen(apiPort, '0.0.0.0', () => resolve());
     });
 
-    log(`API listening on 0.0.0.0:${args.port} (startup ${Date.now() - t0} ms)`);
-    console.log(`SR_HOST_READY ${JSON.stringify({ apiPort: args.port, storeId: config.storeId, firstLaunch: created })}`);
+    const needsSetup = (await prisma.user.count()) === 0;
+    log(`API listening on 0.0.0.0:${apiPort} (startup ${Date.now() - t0} ms)${needsSetup ? ' — awaiting store setup' : ''}`);
+    console.log(`SR_HOST_READY ${JSON.stringify({ apiPort, storeId: config.storeId, firstLaunch: created, needsSetup })}`);
   } catch (err) {
     fail((err as Error).stack ?? String(err));
     await shutdown(1);

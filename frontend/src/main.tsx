@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { IS_TAURI } from '@/lib/config';
 import { HostGate } from '@/components/HostGate';
+import { SetupGate } from '@/features/setup/SetupGate';
 import { App } from './App';
 import './styles/index.css';
 
@@ -25,10 +26,14 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         {IS_TAURI ? (
           <HostGate>
-            <App />
+            <SetupGate>
+              <App />
+            </SetupGate>
           </HostGate>
         ) : (
-          <App />
+          <SetupGate>
+            <App />
+          </SetupGate>
         )}
       </BrowserRouter>
     </QueryClientProvider>

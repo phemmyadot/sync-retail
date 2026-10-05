@@ -36,6 +36,8 @@ services:
       SESSION_TTL: ${SESSION_TTL:-12h}
       OVERRIDE_TTL_SECONDS: ${OVERRIDE_TTL_SECONDS:-300}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      # Fresh install without demo data: allow the owner setup wizard through nginx (not just localhost).
+      SETUP_ALLOW_REMOTE: ${SETUP_ALLOW_REMOTE:-false}
     ports:
       # Direct API access (desktop/Tauri builds can point VITE_API_URL here).
       - "${API_HOST_PORT:-4000}:4000"
