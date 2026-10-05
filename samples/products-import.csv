@@ -1,0 +1,10 @@
+Item Code,UPC,Item Name,Department,Unit Cost,Sell Price,VAT,On Hand
+COF-0101,012345000017,Single Origin — Colombia 250g,Coffee,6.10,13.50,0%,36
+COF-0102,012345000024,Decaf Swiss Water 250g,Coffee,6.40,13.95,0%,18
+BAK-0201,,Almond Croissant,Bakery,1.10,4.25,8.25%,24
+BAK-0202,,Seeded Rye Loaf,Bakery,2.90,9.00,0,12
+DRK-0301,012345000031,Yerba Mate Can,Drinks,1.20,3.49,8.25,48
+DRK-0301,012345000048,Duplicate SKU Row,Drinks,1.00,2.99,8.25,10
+SNK-0401,012345000055,Salted Caramel Bar,Snacks,,3.75,8.25%,-4
+SNK-0402,012345000062,Rice Crackers,Snacks,1.05,,8.25%,30
+HOU-0501,012345000079,Bamboo Toothbrush,Household,0.80,4.50,8.25%,60.5

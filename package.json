@@ -1,0 +1,18 @@
+{
+  "name": "sync-retail",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["shared", "backend", "frontend"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c yellow,cyan \"npm -w backend run dev\" \"npm -w frontend run dev\"",
+    "build": "npm -w backend run build && npm -w frontend run build",
+    "typecheck": "npm -w shared run typecheck && npm -w backend run typecheck && npm -w frontend run typecheck",
+    "db:migrate": "npm -w backend run db:migrate",
+    "db:seed": "npm -w backend run db:seed",
+    "desktop:dev": "npm -w frontend run tauri dev",
+    "desktop:build": "npm -w frontend run tauri build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

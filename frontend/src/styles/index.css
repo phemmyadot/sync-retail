@@ -1,0 +1,193 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * THERMAL NOIR — a night-shift register.
+ * Warm ink surfaces, thermal-paper receipts, one amber "register light".
+ * Contrast (vs --ink): bone 16.4:1 · dust 7.4:1 · amber 11.1:1 · vermilion 7.0:1 · mint 12.4:1
+ * Contrast (vs --paper): paper-ink 15.9:1 · paper-dim 5.1:1 · amber-deep 5.5:1
+ */
+:root {
+  --ink: 15 14 11;
+  --ink-2: 23 21 16;
+  --ink-3: 33 30 23;
+  --ink-4: 45 41 32;
+  --line: 52 48 40;
+  --line-strong: 74 68 56;
+  --bone: 243 236 221;
+  --dust: 168 159 140;
+  --amber: 255 181 71;
+  --amber-ink: 26 18 5;
+  --amber-deep: 138 82 0;
+  --vermilion: 255 107 74;
+  --mint: 139 226 139;
+  --sky: 111 201 242;
+  --orchid: 231 166 240;
+  --paper: 244 238 223;
+  --paper-ink: 27 24 19;
+  --paper-dim: 107 99 82;
+  --paper-rule: 214 204 182;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-ink font-sans text-bone antialiased;
+    font-optical-sizing: auto;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  /* Film grain over everything — subtle, never interactive. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  ::selection {
+    @apply bg-amber text-amber-ink;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--amber));
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Small-caps eyebrow labels */
+  .eyebrow {
+    @apply font-mono text-2xs uppercase text-dust;
+    letter-spacing: 0.14em;
+  }
+  .num {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'zero' 1;
+  }
+  .display {
+    @apply font-display font-normal;
+    letter-spacing: -0.01em;
+  }
+
+  .panel {
+    @apply rounded-sm border border-line bg-ink-2;
+  }
+  .hairline {
+    @apply border-line;
+  }
+
+  .field {
+    @apply w-full rounded-sm border border-line bg-ink px-3 py-2.5 text-bone placeholder:text-dust/70
+      transition-[border-color,box-shadow] duration-150 focus:border-amber focus:outline-none focus:ring-2 focus:ring-amber/25;
+  }
+  .field-paper {
+    @apply w-full rounded-sm border border-paper-rule bg-white/60 px-3 py-2 text-paper-ink placeholder:text-paper-dim
+      focus:border-paper-ink focus:outline-none focus:ring-2 focus:ring-amber/50;
+  }
+
+  /* Thermal paper: the cart, receipts, import preview. Zig-zag torn edges. */
+  .paper {
+    @apply bg-paper text-paper-ink;
+    background-image: repeating-linear-gradient(0deg, transparent 0 27px, rgb(var(--paper-rule) / 0.35) 27px 28px);
+  }
+  .tear-bottom {
+    --tooth: 9px;
+    mask:
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / calc(2 * var(--tooth)) 100%;
+    padding-bottom: calc(var(--tooth) + 0.5rem);
+  }
+  .tear-top {
+    --tooth: 9px;
+    mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) 50% / calc(2 * var(--tooth)) 100%;
+    padding-top: calc(var(--tooth) + 0.5rem);
+  }
+  .tear-both {
+    --tooth: 9px;
+    mask:
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--tooth)) 51% repeat-x,
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--tooth)) 51% repeat-x;
+    padding-block: calc(var(--tooth) + 0.5rem);
+  }
+  .dotted-rule {
+    background-image: radial-gradient(circle, currentColor 1px, transparent 1.4px);
+    background-size: 7px 3px;
+    background-repeat: repeat-x;
+    background-position: center;
+    height: 3px;
+  }
+
+  /* Hatched surface for "danger" / void contexts. */
+  .hatch {
+    background-image: repeating-linear-gradient(-45deg, rgb(var(--vermilion) / 0.12) 0 6px, transparent 6px 14px);
+  }
+  .hatch-amber {
+    background-image: repeating-linear-gradient(-45deg, rgb(var(--amber) / 0.10) 0 6px, transparent 6px 14px);
+  }
+
+  /* Pressable hardware-ish keys */
+  .key {
+    @apply relative select-none shadow-key transition-[transform,background-color,box-shadow] duration-100 ease-out active:translate-y-px active:shadow-none;
+  }
+
+  .scroll-fade {
+    mask-image: linear-gradient(to bottom, transparent, #000 14px, #000 calc(100% - 22px), transparent);
+  }
+}
+
+/* Receipt printing: only the receipt, on plain paper, no grain. */
+@media print {
+  @page {
+    margin: 6mm;
+  }
+  body {
+    background: #fff !important;
+  }
+  body::after {
+    display: none;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    mask: none !important;
+    background: #fff !important;
+    animation: none !important;
+  }
+}
