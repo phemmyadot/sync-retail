@@ -63,9 +63,9 @@ pub fn start(app: &AppHandle) {
     keep_system_awake();
     let fail = |app: &AppHandle, msg: String, log_dir: String| set_status(app, HostStatus::Failed { message: msg, log_dir });
 
-    let data_dir = match app.path().app_local_data_dir() {
-        Ok(d) => d,
-        Err(e) => return fail(app, format!("No data directory: {e}"), String::new()),
+    let data_dir = match crate::profile::data_root(app) {
+        Some(d) => d,
+        None => return fail(app, "No data directory".into(), String::new()),
     };
     let log_dir = data_dir.join("logs").display().to_string();
     let resources = match app.path().resource_dir() {

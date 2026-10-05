@@ -6,7 +6,7 @@ import { useCart, type CartLine } from '@/store/cart';
 import { useSettings } from '@/hooks/useSettings';
 import { Icon } from '@/components/ui/Icon';
 import { fitClass } from '@/components/ui/Price';
-import { TERMINAL_ID } from '@/lib/config';
+import { getTerminalId } from '@/lib/config';
 
 interface Props {
   totals: CartTotals;
@@ -37,7 +37,7 @@ export function CartPanel({ totals, onInc, onDec, onRemove, onDiscount, onCustom
         {/* Receipt head */}
         <div className="px-5 pt-4 text-center lg:pt-5">
           <p className="hidden font-mono text-2xs uppercase tracking-[0.3em] text-paper-dim lg:block">
-            {settings?.storeName} · {TERMINAL_ID}
+            {settings?.storeName} · {getTerminalId()}
           </p>
           <div className="dotted-rule my-3 hidden text-paper-rule lg:block" />
           <button

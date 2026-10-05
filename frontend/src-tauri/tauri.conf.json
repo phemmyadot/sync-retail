@@ -10,17 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Sync Retail POS",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 680,
-        "center": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

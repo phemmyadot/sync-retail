@@ -49,6 +49,12 @@ enum OverrideOutcome {
   DENIED
 }
 
+enum DeviceKind {
+  HOST
+  REGISTER
+  DISPLAY
+}
+
 enum StockMovementType {
   SALE
   RETURN
@@ -76,6 +82,7 @@ model User {
   stockMovements     StockMovement[]
   imports            ImportBatch[]
   auditLogs          AuditLog[]
+  pairedDevices      Device[]
 }
 
 model Category {
@@ -300,4 +307,24 @@ model Setting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+/// A register (or display) paired with this Main Register. The device token
+/// itself is never stored — only its SHA-256.
+model Device {
+  id          String     @id @default(cuid())
+  /// Short code used as the receipt-number prefix: R2, R3, … (the host is R1).
+  code        String     @unique
+  name        String
+  kind        DeviceKind @default(REGISTER)
+  tokenHash   String     @unique
+  appVersion  String?
+  pairedAt    DateTime   @default(now())
+  pairedById  String?
+  pairedBy    User?      @relation(fields: [pairedById], references: [id], onDelete: SetNull)
+  lastSeenAt  DateTime?
+  lastIp      String?
+  revokedAt   DateTime?
+
+  @@index([revokedAt])
 }

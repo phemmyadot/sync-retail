@@ -9,6 +9,7 @@ import { useAuth } from '@/store/auth';
 import { toast } from '@/store/toast';
 import { Avatar, Badge, Button, Input, Label, PageHeader, Segmented } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
+import { DevicesTab } from './DevicesTab';
 
 interface StaffUser {
   id: string;
@@ -23,7 +24,7 @@ interface StaffUser {
 const SWATCHES = ['#FFB547', '#8BE28B', '#6FC9F2', '#E7A6F0', '#F28C6B', '#D9D1BF'];
 
 export function AdminPage() {
-  const [tab, setTab] = useState<'staff' | 'store' | 'system'>('staff');
+  const [tab, setTab] = useState<'staff' | 'store' | 'registers' | 'system'>('staff');
   return (
     <div className="pb-16">
       <PageHeader eyebrow="Administration" title={<>Back <span className="italic text-dust">office</span></>}>
@@ -33,11 +34,12 @@ export function AdminPage() {
           options={[
             { value: 'staff', label: 'Staff & PINs' },
             { value: 'store', label: 'Store & loyalty' },
+            ...(IS_TAURI ? [{ value: 'registers' as const, label: 'Registers' }] : []),
             { value: 'system', label: 'System' },
           ]}
         />
       </PageHeader>
-      {tab === 'staff' ? <StaffTab /> : tab === 'store' ? <StoreTab /> : <SystemTab />}
+      {tab === 'staff' ? <StaffTab /> : tab === 'store' ? <StoreTab /> : tab === 'registers' ? <DevicesTab /> : <SystemTab />}
     </div>
   );
 }

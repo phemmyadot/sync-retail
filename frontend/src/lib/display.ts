@@ -1,8 +1,10 @@
 import type { DisplayMessage } from '@sync-retail/shared';
-import { TERMINAL_ID, wsUrl } from './config';
+import { getDeviceToken, getTerminalId, wsUrl } from './config';
 import { useAuth } from '@/store/auth';
 
-const CHANNEL = `sync-retail-display:${TERMINAL_ID}`;
+// Resolved lazily: the register code is only known after the desktop gate.
+const channelName = () => `sync-retail-display:${getTerminalId()}`;
+const deviceParam = () => (getDeviceToken() ? `&device=${encodeURIComponent(getDeviceToken()!)}` : '');
 
 /**
  * Agent → customer display transport.
@@ -10,7 +12,7 @@ const CHANNEL = `sync-retail-display:${TERMINAL_ID}`;
  *  • WebSocket relay:  display running on another device (tablet on the counter).
  */
 export class DisplayPublisher {
-  private bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
+  private bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName()) : null;
   private ws: WebSocket | null = null;
   private last: DisplayMessage | null = null;
   private retry?: number;
@@ -28,7 +30,7 @@ export class DisplayPublisher {
     const token = useAuth.getState().token;
     if (!token || !this.active) return;
     try {
-      this.ws = new WebSocket(wsUrl(`/ws?terminal=${encodeURIComponent(TERMINAL_ID)}&token=${encodeURIComponent(token)}`));
+      this.ws = new WebSocket(wsUrl(`/ws?terminal=${encodeURIComponent(getTerminalId())}&token=${encodeURIComponent(token)}${deviceParam()}`));
       this.ws.onopen = () => {
         if (this.last) this.ws?.send(JSON.stringify(this.last));
       };
@@ -56,7 +58,7 @@ export class DisplayPublisher {
 }
 
 export function subscribeDisplay(onMessage: (m: DisplayMessage) => void, opts: { relay: boolean }) {
-  const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
+  const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName()) : null;
   bc?.addEventListener('message', (e) => onMessage(e.data as DisplayMessage));
   bc?.postMessage({ type: 'hello' } satisfies DisplayMessage);
 
@@ -65,7 +67,7 @@ export function subscribeDisplay(onMessage: (m: DisplayMessage) => void, opts: {
   let retry: number | undefined;
   const connect = () => {
     if (!opts.relay || stopped) return;
-    ws = new WebSocket(wsUrl(`/ws?terminal=${encodeURIComponent(TERMINAL_ID)}`));
+    ws = new WebSocket(wsUrl(`/ws?terminal=${encodeURIComponent(getTerminalId())}${deviceParam()}`));
     ws.onmessage = (e) => {
       try {
         onMessage(JSON.parse(e.data as string) as DisplayMessage);

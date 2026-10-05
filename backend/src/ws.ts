@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { verifySession } from './services/tokens';
+import { checkDeviceToken, hostMode, isLoopback } from './network/deviceAuth';
 
 /**
  * Relay for the customer-facing display when it runs on a *different device*
@@ -10,7 +11,19 @@ import { verifySession } from './services/tokens';
  *   ws://host/ws?terminal=T1               → subscribe only (display)
  */
 export function attachDisplayRelay(server: Server) {
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    // Desktop host mode: sockets from other machines must belong to a paired
+    // device. Checked during the HTTP upgrade, so a refused client never connects.
+    verifyClient: (info, done) => {
+      if (!hostMode() || isLoopback(info.req.socket.remoteAddress)) return done(true);
+      const device = new URL(info.req.url ?? '', 'http://localhost').searchParams.get('device') ?? undefined;
+      checkDeviceToken(device)
+        .then((d) => (d.ok ? done(true) : done(false, 401, d.code)))
+        .catch(() => done(false, 500));
+    },
+  });
   const rooms = new Map<string, Set<WebSocket>>();
   const lastMessage = new Map<string, string>();
 

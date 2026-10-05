@@ -25,7 +25,7 @@ import { localDb } from '@/lib/db';
 import { DisplayPublisher } from '@/lib/display';
 import { nextReceiptNo, openCustomerDisplay } from '@/lib/platform';
 import { queueSale } from '@/lib/sync';
-import { TERMINAL_ID } from '@/lib/config';
+import { getTerminalId } from '@/lib/config';
 import { useMoney } from '@/lib/format';
 import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
@@ -174,8 +174,8 @@ export function PosTerminal() {
   const complete = async (tenders: SaleTenderInput[]) => {
     const payload: CreateSaleInput = {
       clientId: crypto.randomUUID(),
-      receiptNo: nextReceiptNo(TERMINAL_ID),
-      terminalId: TERMINAL_ID,
+      receiptNo: nextReceiptNo(getTerminalId()),
+      terminalId: getTerminalId(),
       customerId: cart.customer?.id ?? null,
       lines: cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity, discount: l.discount })),
       tenders,

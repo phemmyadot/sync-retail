@@ -1,4 +1,5 @@
-import { getApiBase } from './config';
+import { getApiBase, getDeviceToken } from './config';
+import { useDeviceStatus } from '@/store/device';
 import { useAuth } from '@/store/auth';
 
 export class ApiError extends Error {
@@ -43,6 +44,8 @@ async function request(path: string, opts: Options): Promise<Response> {
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
   if (opts.overrideToken) headers['X-Override-Token'] = opts.overrideToken;
+  const device = getDeviceToken();
+  if (device) headers['X-Device-Token'] = device;
 
   let res: Response;
   try {
@@ -66,6 +69,8 @@ async function request(path: string, opts: Options): Promise<Response> {
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) throw new NetworkError('Server unavailable');
     const e = payload.error ?? {};
+    // This register was removed (or never paired) on the Main Register.
+    if (res.status === 401 && (e.code === 'DEVICE_REVOKED' || e.code === 'DEVICE_REQUIRED')) useDeviceStatus.getState().setProblem(e.code);
     // Expired session on a normal request → bounce to the lock screen.
     if (res.status === 401 && !path.startsWith('/auth') && !path.startsWith('/overrides') && opts.token === undefined) {
       useAuth.getState().lock();

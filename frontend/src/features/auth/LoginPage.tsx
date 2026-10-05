@@ -8,7 +8,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { PinPad } from '@/components/ui/PinPad';
 import { Avatar, Button, Input } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
-import { TERMINAL_ID } from '@/lib/config';
+import { getTerminalId } from '@/lib/config';
 
 const STAFF_CACHE = 'sr-staff';
 
@@ -87,7 +87,7 @@ export function LoginPage() {
         </div>
         <div className="flex items-center gap-3 animate-rise">
           <span className="h-2.5 w-2.5 rounded-full bg-amber shadow-glow animate-blink" />
-          <span className="eyebrow">Register {TERMINAL_ID} · {locked ? 'locked' : 'signed out'}</span>
+          <span className="eyebrow">Register {getTerminalId()} · {locked ? 'locked' : 'signed out'}</span>
         </div>
 
         <div className="my-14 animate-rise [animation-delay:80ms]">

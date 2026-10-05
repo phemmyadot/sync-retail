@@ -15,9 +15,8 @@ const ROLES: { id: 'host' | 'client' | 'restore'; icon: IconName; title: string;
     id: 'client',
     icon: 'wifi',
     title: 'Connect to Main Register',
-    body: 'Add this PC as another register. It finds the Main Register on your network and pairs with a code.',
-    available: false,
-    note: 'Arrives with register pairing',
+    body: 'Add this PC as another register. It finds the Main Register on your network and pairs with a 6-digit code.',
+    available: true,
   },
   {
     id: 'restore',
@@ -30,7 +29,7 @@ const ROLES: { id: 'host' | 'client' | 'restore'; icon: IconName; title: string;
 ];
 
 /** First launch on a new PC: what role does it play? (desktop only) */
-export function RoleChooser({ onHost }: { onHost: () => Promise<void> }) {
+export function RoleChooser({ onHost, onClient }: { onHost: () => Promise<void>; onClient: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +47,7 @@ export function RoleChooser({ onHost }: { onHost: () => Promise<void> }) {
               key={r.id}
               disabled={!r.available || busy}
               onClick={async () => {
+                if (r.id === 'client') return onClient();
                 setBusy(true);
                 setError(null);
                 try {
@@ -66,14 +66,14 @@ export function RoleChooser({ onHost }: { onHost: () => Promise<void> }) {
               )}
             >
               <span className={clsx('grid h-12 w-12 place-items-center rounded-full border', r.available ? 'border-amber/50 text-amber' : 'border-line text-dust')}>
-                {busy && r.available ? <Spinner /> : <Icon name={r.icon} size={22} />}
+                {busy && r.id === 'host' ? <Spinner /> : <Icon name={r.icon} size={22} />}
               </span>
               <span className="display mt-6 text-3xl">{r.title}</span>
               <span className="mt-2 text-sm leading-relaxed text-dust">{r.body}</span>
               {r.note && <span className="eyebrow mt-auto pt-4">{r.note}</span>}
               {r.available && (
                 <span className="mt-auto flex items-center gap-2 pt-4 text-sm font-medium text-amber">
-                  Set up as Main Register <Icon name="arrowRight" size={16} className="transition-transform group-hover:translate-x-1" />
+                  {r.id === 'host' ? 'Set up as Main Register' : 'Find the Main Register'} <Icon name="arrowRight" size={16} className="transition-transform group-hover:translate-x-1" />
                 </span>
               )}
             </button>

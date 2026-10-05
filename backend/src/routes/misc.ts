@@ -8,6 +8,7 @@ import { audit } from '../services/audit';
 import { createSale } from '../services/sales';
 import { getSettings, saveSettings } from '../services/settings';
 import { createSaleSchema } from './sales';
+import { refreshAdvertisement } from '../network/advertise';
 import { toProductDTO } from './products';
 
 // ─── Settings ───────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ settingsRouter.put('/', requirePermission('settings:write'), async (req, res) =>
       .partial(),
   );
   const next = await saveSettings(patch);
+  refreshAdvertisement(next.storeName);
   await audit({ actorId: req.user!.id, action: 'settings.update', entity: 'Setting', entityId: 'store', details: patch });
   res.json(next);
 });

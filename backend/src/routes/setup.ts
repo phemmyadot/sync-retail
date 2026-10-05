@@ -9,6 +9,7 @@ import { audit } from '../services/audit';
 import { formatRecoveryKey, generateBackupKey, saveBackupKey } from '../services/backupKey';
 import { saveSettings } from '../services/settings';
 import { signSession } from '../services/tokens';
+import { refreshAdvertisement } from '../network/advertise';
 
 /**
  * First-run store setup. Only available while the database has no users,
@@ -88,6 +89,7 @@ setupRouter.post('/', lockout.guard, async (req, res) => {
     promoBanners: DEFAULT_SETTINGS.promoBanners,
   });
   lockout.reset(req.ip);
+  refreshAdvertisement(input.store.name);
 
   const auth: AuthResponse = { token: signSession(owner.id, owner.role), user: owner };
   // The recovery key is returned exactly once and never logged.

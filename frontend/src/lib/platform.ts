@@ -6,13 +6,9 @@ import { IS_TAURI } from './config';
  */
 export async function openCustomerDisplay() {
   if (IS_TAURI) {
-    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-    const existing = await WebviewWindow.getByLabel('customer-display');
-    if (existing) {
-      await existing.setFocus();
-      return;
-    }
-    new WebviewWindow('customer-display', { url: '/display', title: 'Customer Display', width: 1280, height: 800 });
+    // Created natively so it shares the register window's WebView2 profile.
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_customer_display');
     return;
   }
   window.open('/display', 'sync-retail-display', 'popup,width=1280,height=800');

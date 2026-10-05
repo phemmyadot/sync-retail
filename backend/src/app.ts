@@ -16,6 +16,8 @@ import { importRouter } from './routes/imports';
 import { auditRouter, publicSettings, settingsRouter, syncRouter } from './routes/misc';
 import { setupRouter } from './routes/setup';
 import { diagnosticsRouter } from './routes/diagnostics';
+import { requireDevice } from './network/deviceAuth';
+import { devicesRouter, pairRouter } from './network/routes';
 
 export function createApp() {
   const app = express();
@@ -28,6 +30,11 @@ export function createApp() {
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, time: new Date().toISOString() });
   });
+
+  // Desktop host mode: other PCs must be paired registers (no-op in cloud mode).
+  app.use('/api', requireDevice);
+  app.use('/api/pair', pairRouter);
+  app.use('/api/devices', devicesRouter);
 
   app.use('/api/auth', authRouter);
   // Login-free screens (lock screen, customer display) need currency + branding.

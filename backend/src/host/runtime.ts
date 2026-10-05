@@ -23,6 +23,7 @@ import type { Server } from 'node:http';
 import { LocalPostgres } from '../db/localPostgres';
 import { migrateDeploy } from '../db/migrate';
 import { freePort, loadOrCreateConfig, portIsFree, saveConfig } from './config';
+import { advertise, stopAdvertising } from '../network/advertise';
 
 interface Args {
   dataDir: string;
@@ -79,14 +80,15 @@ async function main() {
   const { config, created } = await loadOrCreateConfig(args.dataDir);
   if (created) log(`new host identity ${config.storeId}`);
 
-  const pg = new LocalPostgres({
+  const pgOptions = {
     binDir: path.join(args.resources, 'pgsql', 'bin'),
     dataDir: path.join(args.dataDir, 'pgdata'),
     port: config.pg.port,
     user: config.pg.user,
     password: config.pg.password,
     logFile: path.join(logDir, 'postgres.log'),
-  });
+  };
+  let pg = new LocalPostgres(pgOptions);
 
   let server: Server | undefined;
   let stopping = false;
@@ -95,6 +97,7 @@ async function main() {
     stopping = true;
     log('shutting down');
     server?.close();
+    await stopAdvertising().catch(() => {});
     try {
       const { prisma } = await import('../lib/db');
       await prisma.$disconnect();
@@ -132,6 +135,14 @@ async function main() {
     const t0 = Date.now();
     if (!pg.initialised) log('initialising database cluster (first launch)…');
     await pg.init();
+    // Another program (or another Postgres) may have taken our port since last run.
+    if (!(await pg.isRunning()) && !(await portIsFree(config.pg.port))) {
+      const moved = await freePort(config.pg.port + 1);
+      log(`database port ${config.pg.port} is in use by another program — moving to ${moved}`);
+      config.pg.port = moved;
+      saveConfig(args.dataDir, config);
+      pg = new LocalPostgres({ ...pgOptions, port: moved });
+    }
     await pg.start();
     await pg.ensureDatabase(config.pg.database);
     log(`postgres ready on 127.0.0.1:${config.pg.port} (${Date.now() - t0} ms)`);
@@ -181,6 +192,10 @@ async function main() {
       server!.once('error', reject);
       server!.listen(apiPort, '0.0.0.0', () => resolve());
     });
+
+    const { getSettings } = await import('../services/settings');
+    advertise({ storeName: (await getSettings()).storeName, port: apiPort, storeId: config.storeId, version: args.appVersion });
+    log(`advertising _syncretail._tcp on port ${apiPort}`);
 
     const needsSetup = (await prisma.user.count()) === 0;
     log(`API listening on 0.0.0.0:${apiPort} (startup ${Date.now() - t0} ms)${needsSetup ? ' — awaiting store setup' : ''}`);

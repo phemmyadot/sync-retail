@@ -1,6 +1,6 @@
 # Sync Retail — Local-Network Host Mode & Google Drive Backup
 
-**Implementation plan · v1.1 · 2026-10-05** — updated after milestone M1
+**Implementation plan · v1.2 · 2026-10-05** — updated after milestone M2
 
 This plan turns Sync Retail from a cloud-hosted POS into one that can also run entirely on a store's own Windows PCs:
 
@@ -19,8 +19,10 @@ The existing cloud/Docker deployment stays as a second deployment mode. Both mod
 | Feasibility | **Confirmed.** The riskiest piece (desktop app ⇒ bundled API ⇒ embedded Postgres on Windows) is built and tested end to end. |
 | M0 · POC | **Done.** Commit `f9405cf`. See §2. |
 | M1 · Host mode | **Done.** A fresh PC installs per-machine, runs the setup wizard (no demo data), confirms a recovery key and makes its first sale. See §2.6. |
-| Remaining build | M2 pairing/discovery → M3 Drive backup → M4 restore → M5 signing and release. About 5 weeks for one engineer (§12). |
-| Open decisions | 3 in §14 (pairing code length, nightly backups, platforms). Recovery model and install scope are settled (§14). |
+| M2 · Pairing | **Done**, with one item to verify on real hardware. Registers discover the Main Register, pair with a 6-digit code, sell under their own receipt prefix, can be removed instantly, and self-heal when the host's address changes. See §2.7. |
+| Remaining build | M3 Drive backup → M4 restore → M5 signing and release. About 3.5 weeks for one engineer (§12). |
+| Open decisions | 2 in §14 (nightly backups, platforms). Pairing-code length, recovery model and install scope are settled. |
+| Verify on a second PC | Possible blank register window right after the first network scan (§2.7, "Open item"). |
 | Start now (long lead time) | Code-signing certificate (needed by M5) · Google Cloud OAuth consent screen + brand verification (needed by M3; Google review takes 1–3 weeks). |
 
 ---
@@ -152,6 +154,75 @@ docker-compose.yml                  SETUP_ALLOW_REMOTE (fresh server installs wi
 
 - **Where the Backup Key lives:** in the `Setting` table rather than Windows Credential Manager. Both the API (for backups, M3) and a restored host (M4) can then read it without an extra Rust↔Node channel. Postgres is loopback-only with a random password, and backups are encrypted with this key, so including it in the backup leaks nothing. DPAPI/Credential Manager hardening is a candidate for M5.
 - **Data folder:** stays per Windows user (`%LOCALAPPDATA%\dev.syncretail.pos`) even with a per-machine install. Fine for the usual single-account till PC. If shops share one PC across Windows accounts, move it to `%ProgramData%` (M5 decision).
+
+### 2.7 Milestone M2 — delivered
+
+**What a store now does to add a register**
+
+1. On the new PC: install Sync Retail → **Connect to Main Register**. Stores on the network appear within about 3 s, with name, address and version. If discovery is blocked, the Main Register's address can be typed in instead.
+2. On the Main Register: **Admin → Registers → Add register** shows a **6-digit code**. It is single use and expires after 2 minutes (countdown shown), alongside the address for manual entry.
+3. On the new PC: enter the code and a name (e.g. "Front counter"). The register is paired, goes to the staff lock screen, and gets its own code (**R2, R3, …**; the Main Register is R1), which becomes its receipt prefix.
+4. **Admin → Registers** lists each register: online status, last seen, IP, app version, and a **Remove** button.
+5. **Removing** a register stops it on its very next request. It shows "Register removed", with a warning if it still holds unsynced offline sales, and a button to pair again.
+
+**Code added in M2**
+
+```
+backend/prisma/migrations/*_devices   Device model (code R2…, name, kind, tokenHash, appVersion, lastSeen/IP, revokedAt)
+backend/src/network/pairing.ts        codes (6 digits, 2-min TTL, single use, ≤3 outstanding), per-IP lockout (5/10 min),
+                                      global guess cap (20 → all codes voided), device tokens (256-bit; SHA-256 stored)
+backend/src/network/deviceAuth.ts     host mode: X-Device-Token required from other machines (loopback exempt);
+                                      30 s lookup cache, evicted on revoke; last-seen/IP recorded ≤ 1×/min
+backend/src/network/routes.ts         GET /api/pair/info · POST /api/pair/claim · /api/devices (codes, list, rename, revoke)
+backend/src/network/advertise.ts      bonjour-service: _syncretail._tcp, TXT {sid, v, api}; re-announced on rename
+backend/src/ws.ts                     display relay: device token checked during the HTTP upgrade (refused → 401)
+backend/src/host/runtime.ts           Postgres port fallback (moves + remembers if another program took it)
+frontend/src-tauri/src/discovery.rs   mdns-sd browse (one long-lived daemon); address ranking: primary subnet first
+frontend/src-tauri/src/client.rs      pairing persisted: token → Windows Credential Manager, rest → mode.json;
+                                      client_connect: last address, else re-find by store id and save (self-heal)
+frontend/src-tauri/src/windows.rs     windows created in code so the customer display shares the register's WebView2 profile
+frontend/src-tauri/src/profile.rs     SR_PROFILE=<name>: separate data + WebView2 profile per instance (testing only)
+frontend/src/features/setup/ClientPairing.tsx   discover list, manual address, 6-digit code + register name
+frontend/src/components/HostGate.tsx  routes by role: chooser / host / client (finding host, offline banner, "Register removed")
+frontend/src/features/admin/DevicesTab.tsx      Admin → Registers: add (code + countdown), list, remove
+frontend/src/lib/config.ts, api.ts    runtime register code + device token on every request; DEVICE_REVOKED handling
+shared/src/domain.ts                  permission devices:manage (Admin, Manager)
+```
+
+**Verification**
+
+| Suite | Result |
+|---|---|
+| `sr-host.exe` M2 checks (fresh store each run) | **28 / 28 pass**. They cover:<br>• both migrations applied on a fresh store<br>• mDNS browse finds the host by store id (TXT port / version / api)<br>• `/health` and `/pair/info` open to other machines; everything else needs a device token (401); loopback exempt<br>• codes can't be issued from an unpaired machine<br>• wrong code refused; register newer than the host refused (409); a code works once<br>• 3 registers paired as R2, R3, R4; the device token is required in addition to a staff session<br>• display socket without a token refused at the handshake<br>• revoke takes effect on the next request; others unaffected<br>• 5 wrong codes lock the IP out (429) |
+| Multi-register end-to-end: installed Main Register + 3 register instances on one PC | **23 / 23 pass**. They cover:<br>• the store is discovered in 2.9–3.0 s<br>• each register is **paired and at its lock screen in 4.1–4.4 s** (target < 30 s), and the host shows "Paired"<br>• every register sells online under its own prefix, and all sales are on the host<br>• registers reach the host on the LAN address, not a virtual adapter<br>• removal shows "Register removed" instantly<br>• a stale host address self-heals in 5.5 s (and the host had moved to port 47801 because 47800 was still being released — the register found it by store id)<br>• no page errors; clean shutdown |
+| Upgrade over the M1 store | Devices migration applied automatically on launch |
+
+**Bugs found and fixed during M2**
+
+| # | Problem | Fix |
+|---|---|---|
+| 1 | Another program holding the store's Postgres port stopped the host from starting | Move to the next free port, remember it, pass it with `pg_ctl -o "-p …"` |
+| 2 | An unpaired display socket was accepted, then closed (briefly open) | Check the token in `verifyClient` during the upgrade |
+| 3 | A register talked to the host via the WSL/Hyper-V virtual adapter address (unreachable from other PCs) | Rank advertised addresses: primary-network subnet first, then directly routed, then private |
+| 4 | Two registers with the same name were indistinguishable in Admin | Remove buttons carry the register code: "Remove Drive-thru (R4)" |
+| 5 | The customer display opened in a different WebView2 profile from the register (would break BroadcastChannel per profile) | Windows created in Rust with the register's data directory |
+
+**Open item — verify on a second PC**
+
+On the "Find your Main Register" screen, a register's WebView2 process sometimes exited about 2.5 s after its first network scan.
+
+- **What was seen:** the app process stayed up and the window went blank. There was no crash record in the Windows event log. It happened in roughly 1 in 4–5 runs of a dedicated probe. A control run on the same screen without discovery never failed (6/6), and moving to one long-lived mDNS daemon didn't remove it.
+- **What has not been seen:** the full multi-register run on the final build (above) had **no** occurrence across three first scans.
+- **Why it's unresolved:** every failure happened with WebView2's remote-debugging port enabled for the test tooling, so the harness itself may be involved.
+- **Next step:** install the release build on a second physical PC with no debugging, and pair it 10+ times.
+- **If it reproduces:** move discovery into a short-lived helper process (`sr-host --discover`), so mDNS never shares a process with WebView2.
+
+**Changes from the original plan**
+
+- **Register codes:** each register has a short code (R2, R3, …) used as its receipt prefix. Device ids alone made receipts unreadable.
+- **Customer display on another device:** deferred. Registers' own displays work as before (same machine). A tablet display needs the host to serve the web UI, which it doesn't in host mode; that is a later item (M5 or after).
+- **Test-only `SR_PROFILE`:** lets several registers run on one PC. It is documented, not exposed in the UI.
+- **Rebuild trap:** `cargo build --release` alone produces a binary that loads the dev server (`localhost:5173`). Always build with `tauri build` (or `npm run desktop:build`). This is now noted in §10.1.
 
 ---
 
@@ -446,6 +517,8 @@ npm -w backend run build:host        # esbuild → Node SEA → stage resources 
 signtool remove /s sr-host.exe        # strip Node's invalidated signature
 signtool sign /fd sha256 /tr <tsa> /td sha256 sr-host.exe   # EV / OV code-signing cert
 npm -w frontend run tauri build      # Tauri signs app + installer via bundle.windows.signCommand
+                                     # NB: never ship a plain `cargo build --release` exe — without Tauri's
+                                     # custom-protocol feature it loads the dev server (localhost:5173)
 ```
 
 CI: a GitHub Actions `windows-latest` runner with the signing certificate in a hardware-backed service (Azure Trusted Signing or similar).
@@ -494,7 +567,7 @@ Estimates are for one experienced engineer. *Done when* items are acceptance cri
 |---|---|---|---|---|
 | **M0** | **POC** | §2 | **done** | Installed app sells end to end on Windows; clean shutdown under quit and kill |
 | **M1** | **Host mode, production-ready** | Setup wizard (host path), owner account instead of demo seed, recovery key, port conflict handling, sleep prevention, installer firewall rule, per-machine install, logs/diagnostics export | **done** (§2.6) | A fresh PC runs setup and makes a first sale without seeing demo data; installer adds the firewall rule ✔ |
-| M2 | Discovery and pairing | `network/*`, `Device` model, device middleware, `discovery.rs`, client wizard, devices panel, mode switching, IP-change handling | 1.5 wk | 3 client PCs pair via code in under 30 s each; revoking blocks a register immediately; host IP change self-heals |
+| **M2** | **Discovery and pairing** | `network/*`, `Device` model, device middleware, `discovery.rs`, client wizard, devices panel, mode switching, IP-change handling | **done** (§2.7) | 3 registers pair via code in under 30 s each ✔ (4.1–4.4 s) · revoking blocks a register immediately ✔ · host IP change self-heals ✔ · *verify on a second physical PC* |
 | M3 | Backup to Drive | `pg_dump` bundling, SRBK crypto, Drive OAuth + resumable upload, queue, scheduler, retention, dashboard | 1.5 wk | Manual and nightly backups land in `SyncRetail_Backups`; offline backups upload after reconnect; tamper tests fail closed |
 | M4 | Restore | Restore wizard, version guards, identity carry-over, client auto-reconnect, outbox replay | 1 wk | Drill: kill host VM → restore on a new VM → all registers resume without re-pairing; totals reconcile |
 | M5 | Hardening and release | Code signing in CI, updater + pre-update backup, LAN lab matrix, size reduction, docs (owner setup guide, recovery key sheet) | 1 wk | Signed installer passes SmartScreen; LAN matrix signed off |
@@ -521,7 +594,7 @@ Estimates are for one experienced engineer. *Done when* items are acceptance cri
 
 ## 14. Open questions for the product owner
 
-1. **Pairing code length:** accept 6 digits (D5), or must it stay at 4? With 4, the TTL and attempt limits become mandatory.
+1. ~~**Pairing code length**~~ — **settled:** 6 digits, 2-minute TTL, single use, attempt limits (implemented in M2).
 2. **Automatic backups:** the spec asks only for a manual end-of-day trigger. Approve adding an automatic nightly backup (recommended), and choose a default time.
 3. ~~**Recovery model**~~ — **settled in M1:** recovery key sheet always, plus an *optional* passphrase (12+ characters, scrypt N=2^17).
 4. ~~**Install scope**~~ — **settled in M1:** per-machine install (one UAC prompt); it adds the firewall rule.

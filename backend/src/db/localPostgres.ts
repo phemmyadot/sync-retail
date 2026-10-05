@@ -83,7 +83,8 @@ export class LocalPostgres {
   async start() {
     if (await this.isRunning()) return; // e.g. left over from a crash — reuse it
     fs.mkdirSync(path.dirname(this.o.logFile), { recursive: true });
-    const r = await run(this.bin('pg_ctl'), ['start', '-D', this.o.dataDir, '-l', this.o.logFile, '-w', '-t', '90'], { timeoutMs: 120_000 });
+    // Port on the command line wins over postgresql.conf, so the host can move it.
+    const r = await run(this.bin('pg_ctl'), ['start', '-D', this.o.dataDir, '-l', this.o.logFile, '-o', `-p ${this.o.port}`, '-w', '-t', '90'], { timeoutMs: 120_000 });
     if (r.code !== 0) {
       const tail = fs.existsSync(this.o.logFile) ? fs.readFileSync(this.o.logFile, 'utf8').slice(-2000) : '';
       throw new Error(`pg_ctl start failed (${r.code}): ${r.out}\n${tail}`);
