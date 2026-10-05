@@ -20,7 +20,7 @@ The existing cloud/Docker deployment stays as a second deployment mode. Both mod
 | M0 · POC | **Done.** Commit `f9405cf`. See §2. |
 | M1 · Host mode | **Done.** A fresh PC installs per-machine, runs the setup wizard (no demo data), confirms a recovery key and makes its first sale. See §2.6. |
 | M2 · Pairing | **Done**, with one item to verify on real hardware. Registers discover the Main Register, pair with a 6-digit code, sell under their own receipt prefix, can be removed instantly, and self-heal when the host's address changes. See §2.7. |
-| Remaining build | M3 Drive backup → M4 restore → M5 signing and release. About 3.5 weeks for one engineer (§12). |
+| Remaining build | **Deferred (future additions, 2026-10-05):** M3 Drive backup → M4 restore → M5 signing and release → M6 TLS. About 3.5 weeks for one engineer when resumed (§12). Current priority: payments — see `PAYMENTS_PLAN.md`. |
 | Open decisions | 2 in §14 (nightly backups, platforms). Pairing-code length, recovery model and install scope are settled. |
 | Verify on a second PC | Possible blank register window right after the first network scan (§2.7, "Open item"). |
 | Start now (long lead time) | Code-signing certificate (needed by M5) · Google Cloud OAuth consent screen + brand verification (needed by M3; Google review takes 1–3 weeks). |
