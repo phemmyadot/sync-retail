@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ParkedSaleDTO } from '@sync-retail/shared';
 import { api } from '@/lib/api';
 import type { LocalParkedSale } from '@/lib/db';
-import { localParked, subscribeStore } from '@/lib/parked';
+import { localParked } from '@/lib/parked';
 import { useAuth } from '@/store/auth';
 
 /**
@@ -39,16 +39,17 @@ export function useParkedSales(listOpen: boolean) {
     };
     reloadLocal();
     window.addEventListener('sr:parked', refresh);
-    const stop = token
-      ? subscribeStore((e) => {
-          if (e.type !== 'parked:changed') return;
-          if (typeof e.count === 'number') qc.setQueryData(['parked-count'], e.count);
-          void qc.invalidateQueries({ queryKey: ['parked-list'] });
-        })
-      : () => {};
+    // Live count from the store channel (AppShell owns the socket).
+    const onStore = (ev: Event) => {
+      const e = (ev as CustomEvent<{ type: string; count?: number }>).detail;
+      if (e.type !== 'parked:changed') return;
+      if (typeof e.count === 'number') qc.setQueryData(['parked-count'], e.count);
+      void qc.invalidateQueries({ queryKey: ['parked-list'] });
+    };
+    window.addEventListener('sr:store', onStore);
     return () => {
       window.removeEventListener('sr:parked', refresh);
-      stop();
+      window.removeEventListener('sr:store', onStore);
     };
   }, [qc, token]);
 

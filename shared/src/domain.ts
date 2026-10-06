@@ -109,6 +109,8 @@ export interface StoreSettings {
   parkedSaleExpiryHours: number;
   /** Held sales older than this are highlighted in the list. */
   parkedRemindMinutes: number;
+  /** Versioned URL of the uploaded store logo (set by the branding API only), or null for the default mark. */
+  logoUrl: string | null;
 }
 
 export interface LoyaltyConfig {
@@ -130,6 +132,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   idleLockMinutes: 5,
   parkedSaleExpiryHours: 24,
   parkedRemindMinutes: 30,
+  logoUrl: null,
   promoBanners: [
     { title: 'Members earn on every purchase', subtitle: 'Earn {earnRate} points for every {symbol}1 you spend.' },
     { title: '{redeemPoints} points = {redeemValue} off', subtitle: 'Redeem your rewards at any register.' },

@@ -35,6 +35,8 @@ export const isLoopback = (addr?: string) => LOOPBACK.has(addr ?? '');
 export const hostMode = () => process.env.SR_HOST_MODE === '1';
 
 const EXEMPT = [/^\/health$/, /^\/pair\/info$/, /^\/pair\/claim$/];
+// Read-only and not sensitive: the logo is loaded by <img> tags, which can't send the device header.
+const EXEMPT_GET = [/^\/branding\/logo$/];
 
 export function evictDevice(deviceId: string) {
   for (const [k, v] of cache) if (v.deviceId === deviceId) cache.delete(k);
@@ -64,7 +66,7 @@ export async function checkDeviceToken(token: string | undefined, ip?: string): 
 const clientIp = (req: Request) => (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
 
 export const requireDevice: RequestHandler = async (req, _res, next) => {
-  if (!hostMode() || isLoopback(req.socket.remoteAddress) || EXEMPT.some((r) => r.test(req.path))) return next();
+  if (!hostMode() || isLoopback(req.socket.remoteAddress) || EXEMPT.some((r) => r.test(req.path)) || (req.method === 'GET' && EXEMPT_GET.some((r) => r.test(req.path)))) return next();
   const result = await checkDeviceToken(req.header('x-device-token'), clientIp(req));
   if (!result.ok) {
     throw new HttpError(

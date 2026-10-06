@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router-dom';
 import clsx from 'clsx';
 import { ROLE_LABEL, type Permission } from '@sync-retail/shared';
@@ -6,6 +7,8 @@ import { useAuth } from '@/store/auth';
 import { useSyncStatus } from '@/store/sync';
 import { useCan } from '@/hooks/useOverride';
 import { retryFailed, startSyncLoop } from '@/lib/sync';
+import { subscribeStore } from '@/lib/parked';
+import { StoreLogo } from './StoreLogo';
 import { openCustomerDisplay } from '@/lib/platform';
 import { toast } from '@/store/toast';
 import { Icon, type IconName } from '../ui/Icon';
@@ -29,8 +32,18 @@ export function AppShell() {
   const lock = useAuth((s) => s.lock);
   const can = useCan();
   const kioskHold = useKioskHold();
+  const qc = useQueryClient();
+  const token = useAuth((s) => s.token);
 
   useEffect(() => startSyncLoop(), []);
+  // Store-wide live events (held-sales count, new logo): one socket per register.
+  useEffect(() => {
+    if (!token) return;
+    return subscribeStore((e) => {
+      window.dispatchEvent(new CustomEvent('sr:store', { detail: e }));
+      if (e.type === 'branding:changed') void qc.invalidateQueries({ queryKey: ['settings'] });
+    });
+  }, [token, qc]);
 
   const items = NAV.filter((n) => !n.perm || (Array.isArray(n.perm) ? n.perm.some(can) : can(n.perm)));
 
@@ -42,8 +55,8 @@ export function AppShell() {
         className="order-last flex shrink-0 border-t border-line bg-ink md:order-first md:w-[88px] md:flex-col md:border-r md:border-t-0"
       >
         <div className="hidden h-[72px] items-center justify-center border-b border-line md:flex">
-          <span className="display select-none text-3xl italic text-amber" aria-label="Sync Retail" {...kioskHold}>
-            S<span className="text-bone">r</span>
+          <span className="grid h-12 w-[72px] select-none place-items-center" aria-label="Sync Retail" {...kioskHold}>
+            <StoreLogo variant="rail" />
           </span>
         </div>
         <ul className="flex flex-1 justify-around overflow-x-auto md:flex-col md:justify-start md:gap-1 md:py-3">
@@ -101,7 +114,7 @@ export function AppShell() {
 
       {/* Mobile top bar */}
       <div className="flex items-center justify-between border-b border-line px-4 py-2 md:hidden">
-        <span className="display text-2xl italic text-amber">Sr</span>
+        <StoreLogo variant="bar" />
         <div className="flex items-center gap-3">
           <SyncLamp />
           <button onClick={lock} aria-label="Lock terminal">

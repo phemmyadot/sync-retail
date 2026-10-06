@@ -22,12 +22,17 @@ export class NetworkError extends Error {}
 interface Options {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Send a file as the raw request body (with its own Content-Type) instead of JSON. */
+  file?: Blob;
   query?: Record<string, string | number | boolean | undefined | null>;
   overrideToken?: string | null;
   /** Use this bearer token instead of the current session's. */
   token?: string | null;
   signal?: AbortSignal;
 }
+
+/** Server-relative URL (e.g. the logo's `/api/branding/logo?v=…`) → absolute, on desktop registers too. */
+export const assetUrl = (path: string) => (/^https?:/.test(path) ? path : `${getApiBase()}${path}`);
 
 function buildUrl(path: string, query?: Options['query']) {
   const url = `${getApiBase()}/api${path}`;
@@ -41,7 +46,8 @@ function buildUrl(path: string, query?: Options['query']) {
 async function request(path: string, opts: Options): Promise<Response> {
   const token = opts.token !== undefined ? opts.token : useAuth.getState().token;
   const headers: Record<string, string> = {};
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.file) headers['Content-Type'] = opts.file.type || 'application/octet-stream';
+  else if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
   if (opts.overrideToken) headers['X-Override-Token'] = opts.overrideToken;
   const device = getDeviceToken();
@@ -52,7 +58,7 @@ async function request(path: string, opts: Options): Promise<Response> {
     res = await fetch(buildUrl(path, opts.query), {
       method: opts.method ?? 'GET',
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.file ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
       signal: opts.signal,
     });
   } catch (err) {

@@ -17,6 +17,7 @@ import { auditRouter, publicSettings, settingsRouter, syncRouter } from './route
 import { setupRouter } from './routes/setup';
 import { kioskRouter } from './routes/kiosk';
 import { parkedSalesRouter } from './routes/parkedSales';
+import { brandingRouter } from './routes/branding';
 import { diagnosticsRouter } from './routes/diagnostics';
 import { taxRouter } from './routes/tax';
 import { requireDevice } from './network/deviceAuth';
@@ -45,6 +46,8 @@ export function createApp() {
   app.use('/api/setup', setupRouter);
   // Unlock works from the lock screen; the other kiosk routes authenticate themselves.
   app.use('/api/kiosk', kioskRouter);
+  // Logo GET is public (lock screens, <img> tags); upload/delete authenticate themselves.
+  app.use('/api/branding', brandingRouter);
 
   const api = express.Router();
   api.use(authenticate);

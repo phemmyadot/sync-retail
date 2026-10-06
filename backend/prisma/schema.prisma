@@ -397,3 +397,19 @@ model ParkedSale {
 
   @@index([status, createdAt])
 }
+
+// ─── Store assets ───────────────────────────────────────────────────────────
+// Small binary assets (the store logo). Kept in the database so they work the
+// same in Docker and on the desktop Main Register and are part of backups.
+// See docs/done/BRANDING_PLAN.md.
+
+model StoreAsset {
+  key         String   @id
+  mimeType    String
+  bytes       Bytes
+  sha256      String
+  width       Int?
+  height      Int?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

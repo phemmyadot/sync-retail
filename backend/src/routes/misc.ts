@@ -27,6 +27,7 @@ export const publicSettings: RequestHandler = async (_req, res) => {
     promoBanners: s.promoBanners,
     receiptFooter: s.receiptFooter,
     idleLockMinutes: s.idleLockMinutes,
+    logoUrl: s.logoUrl,
   });
 };
 

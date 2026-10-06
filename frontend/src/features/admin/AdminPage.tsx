@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/Modal';
 import { DevicesTab } from './DevicesTab';
 import { TaxManagement } from './TaxManagement';
 import { KioskSettings } from '@/features/kiosk/KioskSettings';
+import { StoreBrandingSettings } from './StoreBrandingSettings';
 import { useCan } from '@/hooks/useOverride';
 
 interface StaffUser {
@@ -236,6 +237,7 @@ function StoreTab() {
 
   const l = form.loyalty;
   return (
+    <>
     <form onSubmit={save} className="grid gap-10 px-6 py-8 lg:grid-cols-2 lg:px-10">
       <section className="space-y-4">
         <h2 className="display text-3xl">Store</h2>
@@ -334,6 +336,11 @@ function StoreTab() {
         </Button>
       </div>
     </form>
+    {/* Outside the form: uploads save on their own. */}
+    <div className="border-t border-line px-6 py-8 lg:px-10">
+      <StoreBrandingSettings />
+    </div>
+    </>
   );
 }
 
