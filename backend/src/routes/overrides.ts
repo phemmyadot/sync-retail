@@ -14,6 +14,7 @@ overridesRouter.post('/authorize', lockout.guard, async (req, res) => {
   const input = body(
     req,
     z.object({
+      approverId: z.string().min(1),
       pin: z.string().regex(/^\d{4,8}$/),
       action: z.enum(OVERRIDE_ACTIONS),
       reason: z.string().max(500).optional(),

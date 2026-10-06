@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { can } from '@sync-retail/shared';
 import { prisma } from '../lib/db';
 import { body, HttpError } from '../lib/http';
 import { createLockout } from '../lib/rateLimit';
 import { authenticate, requirePermission } from '../middleware/auth';
 import { audit } from '../services/audit';
 import { verifySession } from '../services/tokens';
+import { checkApproverPin } from '../services/overrides';
 
 /**
  * Kiosk mode support for desktop registers. The window lockdown itself lives
@@ -22,29 +21,25 @@ const KEY = 'kiosk';
  * session needed), so it is rate-limited and every attempt is logged.
  */
 kioskRouter.post('/unlock', lockout.guard, async (req, res) => {
-  const { pin, register } = body(req, z.object({ pin: z.string().regex(/^\d{4,8}$/), register: z.string().max(80).optional() }));
+  const { approverId, pin, register } = body(
+    req,
+    z.object({ approverId: z.string().min(1), pin: z.string().regex(/^\d{4,8}$/), register: z.string().max(80).optional() }),
+  );
   const header = req.headers.authorization;
   const session = header?.startsWith('Bearer ') ? verifySession(header.slice(7)) : null;
 
-  const approvers = await prisma.user.findMany({
-    where: { active: true, role: { in: ['ADMIN', 'MANAGER'] } },
-    select: { id: true, name: true, role: true, pinHash: true },
-  });
-  let approver: (typeof approvers)[number] | undefined;
-  for (const c of approvers) {
-    if (await bcrypt.compare(pin, c.pinHash)) {
-      approver = c;
-      break;
-    }
-  }
+  const check = await checkApproverPin(approverId, pin, 'devices:manage');
   const context = { register: register ?? null };
-  if (!approver || !can(approver.role, 'devices:manage')) {
+  if (!check.ok) {
     lockout.fail(req.ip);
     if (session) {
-      await prisma.overrideLog.create({ data: { action: 'KIOSK_EXIT', outcome: 'DENIED', requestedById: session.sub, context, ipAddress: req.ip } });
+      await prisma.overrideLog.create({
+        data: { action: 'KIOSK_EXIT', outcome: 'DENIED', requestedById: session.sub, context: { ...context, attemptedApproverId: approverId, attemptedApprover: check.approver?.name ?? null }, ipAddress: req.ip },
+      });
     }
-    throw new HttpError(401, 'PIN not recognised for a manager or admin', 'OVERRIDE_DENIED');
+    throw new HttpError(401, check.message, 'OVERRIDE_DENIED');
   }
+  const approver = check.approver;
   lockout.reset(req.ip);
   const log = await prisma.overrideLog.create({
     data: {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { OVERRIDE_LABEL, type OverrideGrant } from '@sync-retail/shared';
+import { OVERRIDE_BYPASS, OVERRIDE_LABEL, type OverrideGrant, type StaffTile } from '@sync-retail/shared';
 import { api, errorMessage, NetworkError } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { OverrideCancelled, useOverrideStore } from '@/store/override';
@@ -7,6 +7,7 @@ import { toast } from '@/store/toast';
 import { Modal } from './ui/Modal';
 import { PinPad } from './ui/PinPad';
 import { Icon } from './ui/Icon';
+import { ApproverPicker } from './ApproverPicker';
 
 /**
  * Global manager-override gate. Any component can `await ask({...})`; this
@@ -21,6 +22,7 @@ export function OverrideModal() {
   const [error, setError] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [approver, setApprover] = useState<StaffTile | null>(null);
 
   if (!prompt) return null;
 
@@ -28,6 +30,7 @@ export function OverrideModal() {
     setReason('');
     setError(null);
     setBusy(false);
+    setApprover(null);
   };
 
   const cancel = () => {
@@ -37,6 +40,7 @@ export function OverrideModal() {
   };
 
   const submit = async (pin: string) => {
+    if (!approver) return;
     if (prompt.requireReason && reason.trim().length < 3) {
       setError('Enter a reason before the manager approves.');
       setErrorKey((k) => k + 1);
@@ -47,7 +51,7 @@ export function OverrideModal() {
     try {
       const grant = await api<OverrideGrant>('/overrides/authorize', {
         method: 'POST',
-        body: { pin, action: prompt.action, reason: reason.trim() || undefined, saleId: prompt.saleId, context: prompt.context },
+        body: { approverId: approver.id, pin, action: prompt.action, reason: reason.trim() || undefined, saleId: prompt.saleId, context: prompt.context },
       });
       toast.success(`Approved by ${grant.approvedBy.name}`, OVERRIDE_LABEL[prompt.action]);
       prompt.resolve(grant.overrideToken);
@@ -85,12 +89,27 @@ export function OverrideModal() {
         </div>
 
         <div>
-          <p className="eyebrow mb-4 text-center">Manager / admin PIN</p>
-          <PinPad onComplete={submit} errorKey={errorKey} busy={busy} tone="vermilion" />
-          <p className="mt-4 min-h-5 text-center text-sm text-vermilion" role="alert">
-            {error}
-          </p>
+          <p className="eyebrow mb-2">{approver ? 'Approved by' : 'Who is approving?'}</p>
+          <ApproverPicker
+            permission={OVERRIDE_BYPASS[prompt.action]}
+            value={approver}
+            onChange={(a) => {
+              setApprover(a);
+              setError(null);
+            }}
+            tone="vermilion"
+          />
         </div>
+
+        {approver && (
+          <div>
+            <p className="eyebrow mb-4 text-center">{approver.name.split(' ')[0]}’s PIN</p>
+            <PinPad key={approver.id} onComplete={submit} errorKey={errorKey} busy={busy} tone="vermilion" />
+          </div>
+        )}
+        <p className="min-h-5 text-center text-sm text-vermilion" role="alert">
+          {error}
+        </p>
         <p className="text-center text-xs text-dust">Every attempt, approved or denied, is written to the audit log.</p>
       </div>
     </Modal>

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import type { StaffTile } from '@sync-retail/shared';
+import { ApproverPicker } from '@/components/ApproverPicker';
 import { api, errorMessage, NetworkError } from '@/lib/api';
 import { getTerminalId } from '@/lib/config';
 import { kiosk, queueKioskEvent, useKiosk } from '@/lib/kiosk';
@@ -22,6 +24,7 @@ export function KioskExitDialog() {
   const [error, setError] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [approver, setApprover] = useState<StaffTile | null>(null);
 
   if (!open) return null;
 
@@ -34,6 +37,7 @@ export function KioskExitDialog() {
     setOffline(false);
     setError(null);
     setBusy(false);
+    setApprover(null);
     close();
   };
   const fail = (msg: string) => {
@@ -63,8 +67,9 @@ export function KioskExitDialog() {
     setBusy(true);
     setError(null);
     if (offline) return checkOffline(pin);
+    if (!approver) return fail('Choose who is approving first.');
     try {
-      const r = await api<{ approvedBy: { name: string } }>('/kiosk/unlock', { method: 'POST', body: { pin, register: getTerminalId() } });
+      const r = await api<{ approvedBy: { name: string } }>('/kiosk/unlock', { method: 'POST', body: { approverId: approver.id, pin, register: getTerminalId() } });
       await done(r.approvedBy.name);
     } catch (err) {
       if (err instanceof NetworkError) {
@@ -83,7 +88,13 @@ export function KioskExitDialog() {
             ? 'The Main Register can’t be reached. Enter the store’s offline exit PIN.'
             : `A manager or admin PIN unlocks this register for ${MAINTENANCE_MINUTES} minutes: windowed, and the app can be closed.`}
         </p>
-        <PinPad onComplete={submit} errorKey={errorKey} busy={busy} tone="vermilion" />
+        {!offline && (
+          <div>
+            <p className="eyebrow mb-2">{approver ? 'Approved by' : 'Who is unlocking?'}</p>
+            <ApproverPicker permission="devices:manage" value={approver} onChange={setApprover} tone="vermilion" />
+          </div>
+        )}
+        {(offline || approver) && <PinPad key={offline ? 'offline' : approver!.id} onComplete={submit} errorKey={errorKey} busy={busy} tone="vermilion" />}
         <p className="min-h-5 text-center text-sm text-vermilion" role="alert">
           {error}
         </p>

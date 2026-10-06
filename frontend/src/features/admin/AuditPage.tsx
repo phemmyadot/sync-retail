@@ -79,12 +79,19 @@ export function AuditPage() {
                       · approved by <span className="text-bone">{o.approvedBy.name}</span>
                     </>
                   )}
+                  {o.outcome === 'DENIED' && typeof o.context?.attemptedApprover === 'string' && (
+                    <>
+                      {' '}
+                      · wrong PIN for <span className="text-bone">{o.context.attemptedApprover}</span>
+                    </>
+                  )}
                   {o.reason && <> · “{o.reason}”</>}
                   {o.outcome === 'APPROVED' && !o.consumedAt && <span className="text-dust/80"> · not used on a completed sale</span>}
                 </p>
-                {o.context && Object.keys(o.context).length > 0 && (
+                {o.context && Object.keys(o.context).some((k) => !k.startsWith('attempted')) && (
                   <p className="num mt-1 text-xs text-dust/80">
                     {Object.entries(o.context)
+                      .filter(([k]) => !k.startsWith('attempted'))
                       .map(([k, v]) => `${k}=${String(v)}`)
                       .join('  ')}
                   </p>
