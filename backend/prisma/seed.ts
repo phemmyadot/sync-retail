@@ -81,6 +81,7 @@ export async function seedDemo(prisma: PrismaClient, opts: { ifEmpty?: boolean }
     prisma.importBatch.deleteMany(),
     prisma.auditLog.deleteMany(),
     prisma.product.deleteMany(),
+    prisma.taxClass.deleteMany(),
     prisma.category.deleteMany(),
     prisma.customer.deleteMany(),
     prisma.user.deleteMany(),
@@ -100,13 +101,24 @@ export async function seedDemo(prisma: PrismaClient, opts: { ifEmpty?: boolean }
 
   await prisma.setting.create({ data: { key: 'store', value: { ...DEFAULT_SETTINGS, storeName: 'Night Shift Market' } as object } });
 
+  console.log('Tax classes…');
+  // Demo catalog prices are in dollars-style amounts with an 8.25 % sales tax.
+  const taxClasses = new Map<number, { id: string; name: string }>();
+  for (const [i, t] of [
+    { name: 'Sales tax 8.25%', code: 'STD', rateBps: 825, isDefault: true },
+    { name: 'Zero-rated', code: 'ZR', rateBps: 0, isDefault: false },
+  ].entries()) {
+    const row = await prisma.taxClass.create({ data: { ...t, sortOrder: i } });
+    taxClasses.set(t.rateBps, { id: row.id, name: row.name });
+  }
+
   console.log('Catalog…');
   const cats = new Map<string, string>();
   for (const [i, c] of CATEGORIES.entries()) {
     const row = await prisma.category.create({ data: { ...c, sortOrder: i } });
     cats.set(c.name, row.id);
   }
-  const products: Prisma.ProductGetPayload<{ include: { category: true } }>[] = [];
+  const products: Prisma.ProductGetPayload<{ include: { category: true; taxClass: true } }>[] = [];
   for (const [i, [cat, name, price, cost, tax]] of PRODUCTS.entries()) {
     products.push(
       await prisma.product.create({
@@ -117,11 +129,11 @@ export async function seedDemo(prisma: PrismaClient, opts: { ifEmpty?: boolean }
           categoryId: cats.get(cat),
           priceCents: price,
           costCents: cost,
-          taxRateBps: tax,
+          taxClassId: taxClasses.get(tax)!.id,
           stockQty: between(15, 140),
           lowStockThreshold: 10,
         },
-        include: { category: true },
+        include: { category: true, taxClass: true },
       }),
     );
   }
@@ -157,7 +169,7 @@ export async function seedDemo(prisma: PrismaClient, opts: { ifEmpty?: boolean }
 
       const lines = Array.from({ length: between(1, 4) }, () => ({ product: pick(products), quantity: between(1, 3) }));
       const merged = [...new Map(lines.map((l) => [l.product.id, l])).values()];
-      const totals = priceCart(merged.map((l) => ({ unitPriceCents: l.product.priceCents, quantity: l.quantity, taxRateBps: l.product.taxRateBps })));
+      const totals = priceCart(merged.map((l) => ({ unitPriceCents: l.product.priceCents, quantity: l.quantity, taxRateBps: l.product.taxClass.rateBps })));
       const customer = rand() < 0.45 ? pick(customers) : null;
       const method: PaymentMethod = rand() < 0.62 ? 'CARD' : 'CASH';
       const tendered = method === 'CASH' ? Math.ceil(totals.totalCents / 500) * 500 : null;
@@ -190,7 +202,9 @@ export async function seedDemo(prisma: PrismaClient, opts: { ifEmpty?: boolean }
               costCents: l.product.costCents,
               unitPriceCents: l.product.priceCents,
               quantity: l.quantity,
-              taxRateBps: l.product.taxRateBps,
+              taxRateBps: l.product.taxClass.rateBps,
+              taxClassId: l.product.taxClass.id,
+              taxClassName: l.product.taxClass.name,
               taxCents: totals.lines[i].taxCents,
               totalCents: totals.lines[i].totalCents,
             })),

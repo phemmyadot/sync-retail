@@ -66,6 +66,7 @@ export const PERMISSIONS = {
   'overrides:approve': MGMT,
   'audit:read': MGMT,
   'devices:manage': MGMT,
+  'tax:manage': MGMT,
   'users:manage': ADMIN_ONLY,
   'settings:write': ADMIN_ONLY,
 } as const satisfies Record<string, readonly Role[]>;

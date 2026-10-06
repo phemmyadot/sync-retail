@@ -57,6 +57,8 @@ export function toSaleDTO(s: SaleWithRelations): SaleDTO {
       discountValue: i.discountValue,
       discountCents: i.discountCents,
       taxRateBps: i.taxRateBps,
+      taxClassId: i.taxClassId,
+      taxClassName: i.taxClassName,
       taxCents: i.taxCents,
       totalCents: i.totalCents,
     })),
@@ -95,7 +97,7 @@ export async function createSale(input: CreateSaleInput, user: SessionUser, opts
   const productIds = [...new Set(input.lines.map((l) => l.productId))];
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
-    include: { category: { select: { name: true } } },
+    include: { category: { select: { name: true } }, taxClass: { select: { id: true, name: true, rateBps: true } } },
   });
   const byId = new Map(products.map((p) => [p.id, p]));
   for (const id of productIds) {
@@ -107,7 +109,8 @@ export async function createSale(input: CreateSaleInput, user: SessionUser, opts
   const pricingLines = input.lines.map((l) => {
     const p = byId.get(l.productId)!;
     if (!Number.isInteger(l.quantity) || l.quantity <= 0) throw badRequest(`Invalid quantity for ${p.name}`);
-    return { unitPriceCents: p.priceCents, quantity: l.quantity, taxRateBps: p.taxRateBps, discount: l.discount ?? null };
+    // Server authority: the rate always comes from the product's current tax class.
+    return { unitPriceCents: p.priceCents, quantity: l.quantity, taxRateBps: p.taxClass.rateBps, discount: l.discount ?? null };
   });
   const totals = priceCart(pricingLines);
 
@@ -180,7 +183,9 @@ export async function createSale(input: CreateSaleInput, user: SessionUser, opts
               discountType: l.discount?.value ? l.discount.type : null,
               discountValue: l.discount?.value ?? 0,
               discountCents: t.discountCents,
-              taxRateBps: p.taxRateBps,
+              taxRateBps: p.taxClass.rateBps,
+              taxClassId: p.taxClass.id,
+              taxClassName: p.taxClass.name,
               taxCents: t.taxCents,
               totalCents: t.totalCents,
             };

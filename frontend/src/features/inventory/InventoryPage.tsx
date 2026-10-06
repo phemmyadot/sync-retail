@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatBps, type CategoryDTO, type ProductDTO } from '@sync-retail/shared';
+import { formatRate, type CategoryDTO, type ProductDTO, type TaxClassDTO } from '@sync-retail/shared';
+import { errorMessage } from '@/lib/api';
+import { toast } from '@/store/toast';
 import { api } from '@/lib/api';
 import { useMoney } from '@/lib/format';
 import { useCan } from '@/hooks/useOverride';
@@ -22,6 +24,27 @@ export function InventoryPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [categoryId, setCategoryId] = useState('');
   const [editing, setEditing] = useState<ProductDTO | 'new' | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkClass, setBulkClass] = useState('');
+  const taxClasses = useQuery({ queryKey: ['tax-classes'], queryFn: () => api<TaxClassDTO[]>('/tax-classes'), enabled: canWrite });
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const applyBulkClass = async () => {
+    try {
+      const r = await api<{ updated: number }>('/products/bulk/tax-class', { method: 'POST', body: { productIds: [...selected], taxClassId: bulkClass } });
+      toast.success(`Tax class set on ${r.updated} product(s)`, taxClasses.data?.find((c) => c.id === bulkClass)?.name);
+      setSelected(new Set());
+      setBulkClass('');
+      await refresh();
+    } catch (err) {
+      toast.error('Couldn’t update products', errorMessage(err));
+    }
+  };
 
   const products = useQuery({
     queryKey: ['products', filter === 'archived'],
@@ -95,12 +118,44 @@ export function InventoryPage() {
         />
       </div>
 
+      {canWrite && selected.size > 0 && (
+        <div className="sticky top-0 z-10 mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-sm border border-amber/40 bg-ink-2 px-4 py-2.5 shadow-lift lg:mx-10">
+          <span className="text-sm text-bone">
+            <span className="num text-amber">{selected.size}</span> selected
+          </span>
+          <select className="field h-9 w-auto py-1" value={bulkClass} onChange={(e) => setBulkClass(e.target.value)} aria-label="Tax class for selected products">
+            <option value="">Set tax class…</option>
+            {taxClasses.data?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} · {formatRate(c.rateBps)}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" variant="primary" disabled={!bulkClass} onClick={() => void applyBulkClass()}>
+            Apply
+          </Button>
+          <Button size="sm" variant="quiet" onClick={() => setSelected(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
       <div className="overflow-x-auto px-6 pb-10 lg:px-10">
         <table className="w-full min-w-[52rem] border-collapse text-sm">
           <thead>
             <tr className="border-y border-line text-left">
-              {['Product', 'SKU / Barcode', 'Category', 'Cost', 'Price', 'Margin', 'Tax', 'Stock'].map((h, i) => (
-                <th key={h} className={clsx('eyebrow py-2.5 font-normal', i >= 3 && 'text-right', i === 0 && 'pl-2')}>
+              {canWrite && (
+                <th className="w-8 py-2.5 pl-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all shown"
+                    checked={rows.length > 0 && rows.every((p) => selected.has(p.id))}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((p) => p.id)) : new Set())}
+                    className="h-4 w-4 accent-[rgb(var(--amber))]"
+                  />
+                </th>
+              )}
+              {['Product', 'SKU / Barcode', 'Category', 'Cost', 'Price', 'Margin', 'Tax class', 'Stock'].map((h, i) => (
+                <th key={h} className={clsx('eyebrow py-2.5 font-normal', i >= 3 && i !== 6 && 'text-right', i === 0 && 'pl-2')}>
                   {h}
                 </th>
               ))}
@@ -116,6 +171,11 @@ export function InventoryPage() {
                   onClick={() => setEditing(p)}
                   className="group cursor-pointer border-b border-line/70 transition-colors hover:bg-ink-2"
                 >
+                  {canWrite && (
+                    <td className="py-3 pl-2" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" aria-label={`Select ${p.name}`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} className="h-4 w-4 accent-[rgb(var(--amber))]" />
+                    </td>
+                  )}
                   <td className="py-3 pl-2 pr-3">
                     <span className="font-medium text-bone group-hover:text-amber">{p.name}</span>
                     {!p.active && <Badge className="ml-2">Archived</Badge>}
@@ -129,7 +189,9 @@ export function InventoryPage() {
                   <td className="num py-3 pr-3 text-right text-dust">{money(p.costCents)}</td>
                   <td className="num py-3 pr-3 text-right text-bone">{money(p.priceCents)}</td>
                   <td className={clsx('num py-3 pr-3 text-right', margin < 0.2 ? 'text-vermilion' : 'text-dust')}>{(margin * 100).toFixed(0)}%</td>
-                  <td className="num py-3 pr-3 text-right text-dust">{formatBps(p.taxRateBps)}</td>
+                  <td className="py-3 pr-3 text-dust">
+                    {p.taxClassName ?? '—'} <span className="num text-xs">· {formatRate(p.taxRateBps)}</span>
+                  </td>
                   <td className="py-3 text-right">
                     <span className={clsx('num inline-flex min-w-[3.5rem] justify-end font-medium', p.stockQty <= 0 ? 'text-vermilion' : low ? 'text-amber' : 'text-bone')}>
                       {p.stockQty}

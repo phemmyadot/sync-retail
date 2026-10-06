@@ -9,7 +9,8 @@ import { createSale } from '../services/sales';
 import { getSettings, saveSettings } from '../services/settings';
 import { createSaleSchema } from './sales';
 import { refreshAdvertisement } from '../network/advertise';
-import { toProductDTO } from './products';
+import { productInclude, toProductDTO } from './products';
+import { listTaxClasses } from '../services/taxClasses';
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -82,7 +83,7 @@ syncRouter.get('/catalog', async (req, res) => {
   const { since } = query(req, z.object({ since: z.string().datetime().optional() }));
   const where = since ? { updatedAt: { gt: new Date(since) } } : {};
   const [products, categories] = await Promise.all([
-    prisma.product.findMany({ where, include: { category: { select: { name: true } } } }),
+    prisma.product.findMany({ where, include: productInclude }),
     prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
   ]);
   res.json({
@@ -91,6 +92,9 @@ syncRouter.get('/catalog', async (req, res) => {
     products: products.map(toProductDTO),
     categories,
     settings: await getSettings(),
+    // Always the full list (a handful of rows): a rate change doesn't touch
+    // product rows, so delta product sync alone would never carry it.
+    taxClasses: await listTaxClasses(true),
   });
 });
 

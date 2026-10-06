@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { formatBps, type CartTotals } from '@sync-retail/shared';
+import { formatBps, type CartTotals, type TaxBreakdownLine } from '@sync-retail/shared';
 import { useMoney } from '@/lib/format';
 import { useCart, type CartLine } from '@/store/cart';
 import { useSettings } from '@/hooks/useSettings';
@@ -10,6 +10,8 @@ import { getTerminalId } from '@/lib/config';
 
 interface Props {
   totals: CartTotals;
+  /** Per-class tax lines (from calculateCartTax). */
+  taxes: TaxBreakdownLine[];
   onInc: (l: CartLine) => void;
   onDec: (l: CartLine) => void;
   onRemove: (l: CartLine) => void;
@@ -20,7 +22,7 @@ interface Props {
 }
 
 /** The cart, rendered as a live thermal receipt. */
-export function CartPanel({ totals, onInc, onDec, onRemove, onDiscount, onCustomer, onClear, onCharge }: Props) {
+export function CartPanel({ totals, taxes, onInc, onDec, onRemove, onDiscount, onCustomer, onClear, onCharge }: Props) {
   const { lines, customer, lastAddedKey } = useCart();
   const { data: settings } = useSettings();
   const money = useMoney();
@@ -125,7 +127,11 @@ export function CartPanel({ totals, onInc, onDec, onRemove, onDiscount, onCustom
           <div className="dotted-rule mb-3 text-paper-rule" />
           <Row label={`Subtotal · ${totals.itemCount} item${totals.itemCount === 1 ? '' : 's'}`} value={money(totals.subtotalCents)} />
           {totals.discountCents > 0 && <Row label="Discounts" value={`−${money(totals.discountCents)}`} accent />}
-          <Row label="Tax" value={money(totals.taxCents)} />
+          {taxes.length <= 1 ? (
+            <Row label={taxes[0]?.name ?? 'Tax'} value={money(totals.taxCents)} />
+          ) : (
+            taxes.map((t) => <Row key={t.taxClassId ?? t.name} label={t.name} value={money(t.taxCents)} title={`on ${money(t.taxableCents)}`} />)
+          )}
           <div className="mt-2 flex items-end justify-between border-t-2 border-paper-ink pt-2">
             <span className="font-mono text-xs uppercase tracking-[0.2em]">Total</span>
             <span
@@ -166,9 +172,9 @@ export function CartPanel({ totals, onInc, onDec, onRemove, onDiscount, onCustom
   );
 }
 
-function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Row({ label, value, accent, title }: { label: string; value: string; accent?: boolean; title?: string }) {
   return (
-    <div className={clsx('flex justify-between py-0.5 text-sm', accent ? 'text-amber-deep' : 'text-paper-dim')}>
+    <div title={title} className={clsx('flex justify-between py-0.5 text-sm', accent ? 'text-amber-deep' : 'text-paper-dim')}>
       <span>{label}</span>
       <span className="num">{value}</span>
     </div>

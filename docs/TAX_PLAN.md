@@ -1,6 +1,6 @@
 # Sync Retail — Tax Classes & Item-Level Tax Engine
 
-**Implementation plan · v1 · 2026-10-05**
+**Implementation plan · v1 · 2026-10-05 — implemented 2026-10-06 (X1–X5 done; see §14)**
 
 Admins and managers define **tax classes** (e.g. *VAT 7.5%*, *Zero-rated*, *Exempt*, *Luxury 15%*) and attach one to each product. The checkout calculates tax per item in real time, and shows the customer a clear breakdown by class. Bulk imports resolve tax classes by name or rate.
 
@@ -308,3 +308,28 @@ The data model (classes + per-line snapshots) doesn't block any of these.
 2. **Starter classes:** for NGN, are *VAT 7.5%*, *Zero-rated* and *Exempt* the right defaults? Is a separate *Luxury 15%* expected?
 3. **Agents and the per-class breakdown:** should Sales Agents see it at the till, or only the customer-facing total? (Default: everyone sees it.)
 4. **Receipt format:** do you need a specific VAT invoice layout? For example a TIN on the receipt (would add a `taxId` store setting), or "VAT inclusive" wording.
+
+---
+
+## 14. Implementation status (2026-10-06)
+
+All milestones **X1–X5 are implemented**. The open questions in §13 are still open: v1 ships tax-exclusive pricing, everyone sees the breakdown, and there is no TIN on receipts.
+
+| # | Status | Notes |
+|---|---|---|
+| X1 | ✅ | Migration `20261006130017_tax_classes` is hand-written and lossless. It creates one class per distinct product rate (0 → *Zero-rated*, 7.5 → *VAT 7.5%*, otherwise *Tax r%*), backfills `Product.taxClassId`, and names historical `SaleItem` rows. On the Docker store, all 28 products kept their exact rate and 1,539 sale lines were named. `GET /api/tax-classes` is open to any staff member; writes need `tax:manage`. |
+| X2 | ✅ | `shared/src/tax.ts` holds `taxBreakdown`, markers and resolution. The till, checkout, customer display and receipt show one tax line per class (receipts use A/B/C markers only when there are several classes). The server re-prices every sale. If the client's total is stale, it re-pulls the catalog and shows "Prices or tax rates changed during this sale". |
+| X3 | ✅ | Admin → **Tax** tab (create, edit, confirm a rate change with the product count, set default, move products, archive, delete only when unused). Managers see Admin with only the tabs they have permission for. The product editor has a class picker. Inventory shows a class column and a bulk "Set tax class". |
+| X4 | ✅ | Import column **Tax class** (aliases: tax, VAT, tax rate, GST…). Values resolve by name, code or a unique rate. Unknown or ambiguous values open a review panel (map / use default / create new, with the rate pre-filled from the text). A blank cell keeps an existing product's class. |
+| X5 | ✅ | Reports, the PDF and the CSV have a "Tax by class" table (taxable, tax, net of returns). |
+
+**Sync:** every catalog pull sends all tax classes, and registers resolve each product's rate from its class. A rate change therefore reaches offline registers on their next sync, even though no product row changed.
+
+**Verification**
+- `npm -w shared test`: 25 unit tests, including the §4.3 worked example (₦11,500,113 total), rounding, discounts, 0 % / 100 %, and import resolution.
+- API script: 33/33 checks (CRUD rules, default handling, delete/archive guards, bulk assign, sale snapshots, stale-total rejection, import mapping).
+- Headless UI run: 19/19 checks. Covers role visibility, creating a class, the rate-change confirmation, the mixed-class cart, display, checkout and receipt, a rate change in the middle of a sale, inventory bulk set, the import review, and reports.
+- Docker `api`/`web` rebuilt and verified on the new schema.
+
+**Remaining:** rebuild the desktop installer (`sr-host` + Tauri bundle). Existing desktop databases migrate automatically on the next launch of the new build.
+

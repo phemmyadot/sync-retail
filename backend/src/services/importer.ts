@@ -5,12 +5,15 @@ import {
   type ColumnMapping,
   type ExistingCatalog,
   type ImportMode,
+  type NormalizedProduct,
   type RawRow,
   type SessionUser,
+  type TaxMapping,
 } from '@sync-retail/shared';
-import { prisma } from '../lib/db';
+import { prisma, type Tx } from '../lib/db';
 import { badRequest } from '../lib/http';
 import { audit } from './audit';
+import { defaultTaxClassId, listTaxClasses } from './taxClasses';
 
 export const MAX_IMPORT_ROWS = 20_000;
 
@@ -38,7 +41,23 @@ async function loadExisting(skus: string[], barcodes: string[]): Promise<Existin
   };
 }
 
-export async function validateImport(rows: RawRow[], mapping: ColumnMapping, mode: ImportMode) {
+/** Review-step choices must point at real, unarchived classes; new names must be free. */
+async function checkTaxMapping(taxMapping: TaxMapping | undefined) {
+  if (!taxMapping) return;
+  const classes = await listTaxClasses(true);
+  for (const [value, choice] of Object.entries(taxMapping)) {
+    if ('taxClassId' in choice) {
+      const c = classes.find((x) => x.id === choice.taxClassId);
+      if (!c || c.archived) throw badRequest(`Tax mapping for "${value}" points at an unknown or archived class`);
+    } else if ('create' in choice) {
+      if (!choice.create.name.trim() || choice.create.rateBps < 0 || choice.create.rateBps > 10_000) {
+        throw badRequest(`Tax mapping for "${value}": new class needs a name and a rate between 0 and 100 %`);
+      }
+    }
+  }
+}
+
+export async function validateImport(rows: RawRow[], mapping: ColumnMapping, mode: ImportMode, taxMapping?: TaxMapping) {
   const missing = missingRequiredFields(mapping);
   if (missing.length) throw badRequest(`Map these required fields first: ${missing.join(', ')}`);
   if (rows.length > MAX_IMPORT_ROWS) throw badRequest(`Imports are limited to ${MAX_IMPORT_ROWS} rows`);
@@ -46,7 +65,37 @@ export async function validateImport(rows: RawRow[], mapping: ColumnMapping, mod
   const pick = (key: keyof ColumnMapping) =>
     mapping[key] ? rows.map((r) => String(r[mapping[key] as string] ?? '').trim()).filter(Boolean) : [];
   const existing = await loadExisting(pick('sku'), pick('barcode').map((b) => b.replace(/\.0+$/, '')));
-  return validateImportRows(rows, mapping, existing, mode);
+  await checkTaxMapping(taxMapping);
+  return validateImportRows(rows, mapping, existing, mode, { classes: await listTaxClasses(true), mapping: taxMapping });
+}
+
+/**
+ * Turns a row's tax decision into a class id.
+ * - new products: blank / "use default" → default class
+ * - existing products: blank → unchanged (undefined); explicit "use default" → default class
+ */
+function taxClassFor(d: NormalizedProduct, isUpdate: boolean, defaultId: string, created: Map<string, string>): string | undefined {
+  const t = d.tax;
+  if (!t) return isUpdate ? undefined : defaultId;
+  if ('taxClassId' in t) return t.taxClassId;
+  if ('create' in t) return created.get(t.create.name.trim().toLowerCase());
+  return isUpdate && d.taxValue === null ? undefined : defaultId;
+}
+
+/** Creates classes chosen in the review step (or reuses one that already has that name). */
+async function createMappedClasses(tx: Tx, taxMapping: TaxMapping | undefined, userId: string) {
+  const created = new Map<string, string>();
+  for (const choice of Object.values(taxMapping ?? {})) {
+    if (!('create' in choice)) continue;
+    const name = choice.create.name.trim();
+    const key = name.toLowerCase();
+    if (created.has(key)) continue;
+    const existing = await tx.taxClass.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } });
+    const c = existing ?? (await tx.taxClass.create({ data: { name, rateBps: choice.create.rateBps } }));
+    if (!existing) await audit({ actorId: userId, action: 'tax_class.create', entity: 'TaxClass', entityId: c.id, details: { name, rateBps: c.rateBps, via: 'import' } }, tx);
+    created.set(key, c.id);
+  }
+  return created;
 }
 
 /**
@@ -54,16 +103,18 @@ export async function validateImport(rows: RawRow[], mapping: ColumnMapping, mod
  * transaction. Invalid rows are skipped and reported back.
  */
 export async function commitImport(
-  input: { fileName: string; rows: RawRow[]; mapping: ColumnMapping; mode: ImportMode },
+  input: { fileName: string; rows: RawRow[]; mapping: ColumnMapping; mode: ImportMode; taxMapping?: TaxMapping },
   user: SessionUser,
 ) {
-  const result = await validateImport(input.rows, input.mapping, input.mode);
+  const result = await validateImport(input.rows, input.mapping, input.mode, input.taxMapping);
   const valid = result.rows.filter((r) => r.data);
 
   const categoryNames = [...new Set(valid.map((r) => r.data!.category).filter((c): c is string => !!c))];
 
   const batch = await prisma.$transaction(
     async (tx) => {
+      const defaultId = await defaultTaxClassId(tx);
+      const createdClasses = await createMappedClasses(tx, input.taxMapping, user.id);
       const categoryIds = new Map<string, string>();
       for (const name of categoryNames) {
         const c = await tx.category.upsert({ where: { name }, create: { name }, update: {} });
@@ -84,7 +135,7 @@ export async function commitImport(
               barcode: d.barcode ?? undefined,
               priceCents: d.priceCents,
               ...(d.costCents !== null && { costCents: d.costCents }),
-              ...(d.taxRateBps !== null && { taxRateBps: d.taxRateBps }),
+              ...(taxClassFor(d, true, defaultId, createdClasses) && { taxClassId: taxClassFor(d, true, defaultId, createdClasses) }),
               ...(d.stockQty !== null && { stockQty: d.stockQty }),
               ...(categoryId && { categoryId }),
               active: true,
@@ -104,7 +155,7 @@ export async function commitImport(
               name: d.name,
               priceCents: d.priceCents,
               costCents: d.costCents ?? 0,
-              taxRateBps: d.taxRateBps ?? 0,
+              taxClassId: taxClassFor(d, false, defaultId, createdClasses)!,
               stockQty: d.stockQty ?? 0,
               categoryId,
             },

@@ -38,7 +38,10 @@ export interface ProductDTO {
   categoryName: string | null;
   costCents: number;
   priceCents: number;
+  /** Resolved from the product's tax class (kept for older clients / offline caches). */
   taxRateBps: number;
+  taxClassId: string;
+  taxClassName: string;
   stockQty: number;
   lowStockThreshold: number;
   active: boolean;
@@ -95,6 +98,8 @@ export interface SaleItemDTO {
   discountValue: number;
   discountCents: number;
   taxRateBps: number;
+  taxClassId: string | null;
+  taxClassName: string | null;
   taxCents: number;
   totalCents: number;
 }
@@ -163,6 +168,8 @@ export interface ReportSummary {
   series: { bucket: string; totalCents: number; transactions: number }[];
   topProducts: { productId: string; name: string; sku: string; quantity: number; revenueCents: number }[];
   categories: { name: string; revenueCents: number; quantity: number }[];
+  /** Tax collected by class for the period (net of returns). */
+  taxes: { name: string; rateBps: number; taxableCents: number; taxCents: number }[];
   payments: { method: PaymentMethod; amountCents: number; count: number }[];
   workers: { userId: string; name: string; transactions: number; revenueCents: number; averageTicketCents: number; voids: number; overrides: number }[];
 }
@@ -175,6 +182,8 @@ export type DisplayMessage =
       subtotalCents: number;
       discountCents: number;
       taxCents: number;
+      /** Per-class tax lines (VAT 7.5% …), largest rate first. */
+      taxes: { name: string; rateBps: number; taxCents: number }[];
       totalCents: number;
       customer: { name: string; pointsBalance: number } | null;
       loyaltyAppliedCents: number;

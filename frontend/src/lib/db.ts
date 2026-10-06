@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { CategoryDTO, CreateSaleInput, CustomerDTO, ProductDTO, StoreSettings } from '@sync-retail/shared';
+import type { CategoryDTO, CreateSaleInput, CustomerDTO, ProductDTO, StoreSettings, TaxClassDTO } from '@sync-retail/shared';
 
 export interface OutboxSale {
   clientId: string;
@@ -22,6 +22,7 @@ interface Meta {
 class LocalDB extends Dexie {
   products!: Table<ProductDTO, string>;
   categories!: Table<CategoryDTO, string>;
+  taxClasses!: Table<TaxClassDTO, string>;
   customers!: Table<CustomerDTO, string>;
   outbox!: Table<OutboxSale, string>;
   meta!: Table<Meta, string>;
@@ -35,6 +36,8 @@ class LocalDB extends Dexie {
       outbox: 'clientId, status, createdAt',
       meta: 'key',
     });
+    // v2: tax classes (rates resolve from the class, so a rate change syncs without touching products).
+    this.version(2).stores({ taxClasses: 'id, isDefault' });
   }
 }
 

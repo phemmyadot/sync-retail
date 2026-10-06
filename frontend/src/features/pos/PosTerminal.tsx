@@ -3,7 +3,6 @@ import clsx from 'clsx';
 import {
   effectiveDiscountBps,
   OVERRIDE_LABEL,
-  priceCart,
   pointsEarned as calcPoints,
   summarizeTenders,
   type CreateSaleInput,
@@ -24,7 +23,8 @@ import { api, ApiError, NetworkError } from '@/lib/api';
 import { localDb } from '@/lib/db';
 import { DisplayPublisher } from '@/lib/display';
 import { nextReceiptNo, openCustomerDisplay } from '@/lib/platform';
-import { queueSale } from '@/lib/sync';
+import { pullCatalog, queueSale } from '@/lib/sync';
+import { calculateCartTax, lineMarkers } from '@/utils/taxCalculator';
 import { getTerminalId } from '@/lib/config';
 import { useMoney } from '@/lib/format';
 import { Icon } from '@/components/ui/Icon';
@@ -38,7 +38,7 @@ import { CheckoutModal } from './CheckoutModal';
 import { Receipt, saleToReceipt, type ReceiptData } from './Receipt';
 
 export function PosTerminal() {
-  const { products, categories, ready, lookup } = useCatalog();
+  const { products, categories, ready, lookup, taxFor } = useCatalog();
   const cart = useCart();
   const user = useAuth((s) => s.user)!;
   const authorize = useOverride();
@@ -56,7 +56,17 @@ export function PosTerminal() {
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const totals = useMemo(() => priceCart(cart.lines), [cart.lines]);
+  // Each line is taxed at its product's *current* class rate (synced classes).
+  const taxedLines = useMemo(
+    () =>
+      cart.lines.map((l) => {
+        const t = taxFor(l.productId);
+        return { ...l, taxRateBps: t?.taxRateBps ?? l.taxRateBps, taxClassId: t?.taxClassId ?? null, taxClassName: t?.taxClassName ?? null };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cart.lines, products],
+  );
+  const { totals, breakdown } = useMemo(() => calculateCartTax(taxedLines), [taxedLines]);
 
   // ── Customer display sync ────────────────────────────────────────────────
   const publisher = useRef<DisplayPublisher | null>(null);
@@ -80,13 +90,14 @@ export function PosTerminal() {
             subtotalCents: totals.subtotalCents,
             discountCents: totals.discountCents,
             taxCents: totals.taxCents,
+            taxes: breakdown.map((b) => ({ name: b.name, rateBps: b.rateBps, taxCents: b.taxCents })),
             totalCents: totals.totalCents,
             customer: cart.customer && { name: cart.customer.name, pointsBalance: cart.customer.pointsBalance },
             loyaltyAppliedCents: 0,
           }
         : { type: 'idle' },
     );
-  }, [cart.lines, cart.customer, totals, receipt]);
+  }, [cart.lines, cart.customer, totals, breakdown, receipt]);
 
   // ── Adding items ─────────────────────────────────────────────────────────
   const addProduct = useCallback(
@@ -183,6 +194,7 @@ export function PosTerminal() {
       createdAt: new Date().toISOString(),
     };
     const t = summarizeTenders(totals.totalCents, tenders);
+    const markers = lineMarkers(taxedLines, breakdown);
     let data: ReceiptData;
     try {
       const sale = await api<SaleDTO>('/sales', { method: 'POST', body: payload });
@@ -196,6 +208,12 @@ export function PosTerminal() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.overrideAction) throw new Error(`${OVERRIDE_LABEL[err.overrideAction as keyof typeof OVERRIDE_LABEL] ?? 'Approval'} needs a manager. ${err.message}`);
+        // The server re-prices every sale. A different total means a price or
+        // tax rate changed while this cart was open: refresh and re-collect.
+        if (err.status === 400 && (err.details as { expectedTotalCents?: number } | undefined)?.expectedTotalCents !== undefined) {
+          await pullCatalog();
+          throw new Error('Prices or tax rates changed during this sale — the total has been updated. Please take payment again.');
+        }
         throw err;
       }
       if (!(err instanceof NetworkError)) throw err;
@@ -207,16 +225,18 @@ export function PosTerminal() {
         createdAt: payload.createdAt!,
         cashierName: user.name,
         customer: cart.customer && { name: cart.customer.name },
-        lines: cart.lines.map((l, i) => ({
+        lines: taxedLines.map((l, i) => ({
           name: l.name,
           quantity: l.quantity,
           unitPriceCents: l.unitPriceCents,
           discountCents: totals.lines[i].discountCents,
           totalCents: totals.lines[i].netCents,
+          marker: markers[i],
         })),
         subtotalCents: totals.subtotalCents,
         discountCents: totals.discountCents,
         taxCents: totals.taxCents,
+        taxes: breakdown,
         totalCents: totals.totalCents,
         tenders,
         changeCents: t.changeCents,
@@ -328,6 +348,7 @@ export function PosTerminal() {
       <div className="flex max-h-[52vh] min-h-0 min-w-0 flex-col border-t border-line bg-ink-2/60 p-4 lg:max-h-none lg:border-l lg:border-t-0 lg:p-5">
         <CartPanel
           totals={totals}
+          taxes={breakdown}
           onInc={(l) => cart.setQty(l.key, l.quantity + 1)}
           onDec={(l) => void onDec(l)}
           onRemove={(l) => void onRemove(l)}
@@ -351,6 +372,7 @@ export function PosTerminal() {
       <CheckoutModal
         open={checkingOut}
         totalCents={totals.totalCents}
+        breakdown={{ subtotalCents: totals.subtotalCents, discountCents: totals.discountCents, taxes: breakdown }}
         customer={cart.customer}
         onClose={() => setCheckingOut(false)}
         onProgress={(paid, remaining) => publisher.current?.send({ type: 'checkout', totalCents: totals.totalCents, paidCents: paid, remainingCents: remaining })}

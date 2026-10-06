@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { formatMoneyCompact, PAYMENT_LABEL, type ReportGranularity, type ReportSummary } from '@sync-retail/shared';
+import { formatMoneyCompact, formatRate, PAYMENT_LABEL, type ReportGranularity, type ReportSummary } from '@sync-retail/shared';
 import { useSettings } from '@/hooks/useSettings';
 import { api, download, errorMessage } from '@/lib/api';
 import { useMoney } from '@/lib/format';
@@ -165,6 +165,46 @@ export function ReportsPage() {
                 })}
               />
             </Panel>
+          </section>
+
+          <section className="border-b border-line px-6 py-8 lg:px-10">
+            <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="display text-3xl">Tax by class</h2>
+              <span className="eyebrow">For VAT returns · net of returns</span>
+            </div>
+            {r.taxes.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[34rem] text-sm">
+                  <thead>
+                    <tr className="border-y border-line text-left">
+                      {['Tax class', 'Rate', 'Taxable sales', 'Tax collected'].map((h, i) => (
+                        <th key={h} className={clsx('eyebrow py-2.5 font-normal', i > 0 && 'text-right')}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.taxes.map((t) => (
+                      <tr key={`${t.name}-${t.rateBps}`} className="border-b border-line/60">
+                        <td className="py-2.5 text-bone">{t.name}</td>
+                        <td className="num py-2.5 text-right text-dust">{formatRate(t.rateBps)}</td>
+                        <td className="num py-2.5 text-right">{money(t.taxableCents)}</td>
+                        <td className="num py-2.5 text-right text-bone">{money(t.taxCents)}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-medium">
+                      <td className="py-2.5 text-bone">Total</td>
+                      <td />
+                      <td className="num py-2.5 text-right">{money(r.taxes.reduce((a, t) => a + t.taxableCents, 0))}</td>
+                      <td className="num py-2.5 text-right text-amber">{money(r.taxes.reduce((a, t) => a + t.taxCents, 0))}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-dust">No sales in this period.</p>
+            )}
           </section>
 
           <section className="px-6 py-8 lg:px-10">

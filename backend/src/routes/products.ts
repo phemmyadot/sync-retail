@@ -6,11 +6,13 @@ import { prisma } from '../lib/db';
 import { body, notFound, query, pid } from '../lib/http';
 import { requirePermission } from '../middleware/auth';
 import { audit } from '../services/audit';
+import { assertAssignable, defaultTaxClassId } from '../services/taxClasses';
 
 export const productsRouter = Router();
 export const categoriesRouter = Router();
 
-const include = { category: { select: { name: true } } } as const;
+export const productInclude = { category: { select: { name: true } }, taxClass: { select: { name: true, rateBps: true } } } as const;
+const include = productInclude;
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof include }>;
 
 export const toProductDTO = (p: ProductRow): ProductDTO => ({
@@ -22,7 +24,10 @@ export const toProductDTO = (p: ProductRow): ProductDTO => ({
   categoryName: p.category?.name ?? null,
   costCents: p.costCents,
   priceCents: p.priceCents,
-  taxRateBps: p.taxRateBps,
+  // The rate always comes from the product's tax class.
+  taxRateBps: p.taxClass.rateBps,
+  taxClassId: p.taxClassId,
+  taxClassName: p.taxClass.name,
   stockQty: p.stockQty,
   lowStockThreshold: p.lowStockThreshold,
   active: p.active,
@@ -36,7 +41,8 @@ const productInput = z.object({
   categoryId: z.string().nullable().optional(),
   costCents: z.number().int().min(0).default(0),
   priceCents: z.number().int().min(0),
-  taxRateBps: z.number().int().min(0).max(5000).default(0),
+  /** Omitted on create → the store's default tax class. */
+  taxClassId: z.string().min(1).optional(),
   stockQty: z.number().int().min(0).default(0),
   lowStockThreshold: z.number().int().min(0).default(5),
   active: z.boolean().default(true),
@@ -93,7 +99,9 @@ productsRouter.get('/:id', async (req, res) => {
 
 productsRouter.post('/', requirePermission('products:write'), async (req, res) => {
   const input = body(req, productInput);
-  const p = await prisma.product.create({ data: { ...input, barcode: input.barcode || null }, include });
+  const taxClassId = input.taxClassId ?? (await defaultTaxClassId());
+  await assertAssignable(taxClassId);
+  const p = await prisma.product.create({ data: { ...input, taxClassId, barcode: input.barcode || null }, include });
   if (p.stockQty)
     await prisma.stockMovement.create({ data: { productId: p.id, type: 'ADJUSTMENT', quantity: p.stockQty, reference: 'Initial stock', userId: req.user!.id } });
   await audit({ actorId: req.user!.id, action: 'product.create', entity: 'Product', entityId: p.id, details: { sku: p.sku } });
@@ -103,6 +111,7 @@ productsRouter.post('/', requirePermission('products:write'), async (req, res) =
 productsRouter.patch('/:id', requirePermission('products:write'), async (req, res) => {
   // Stock is changed only through /adjust-stock so every change has a movement row.
   const input = body(req, productInput.omit({ stockQty: true }).partial());
+  if (input.taxClassId) await assertAssignable(input.taxClassId);
   const before = await prisma.product.findUnique({ where: { id: pid(req) } });
   if (!before) throw notFound('Product');
   const p = await prisma.product.update({
@@ -115,6 +124,15 @@ productsRouter.patch('/:id', requirePermission('products:write'), async (req, re
   );
   await audit({ actorId: req.user!.id, action: 'product.update', entity: 'Product', entityId: p.id, details: changed as Prisma.InputJsonValue });
   res.json(toProductDTO(p));
+});
+
+/** Inventory bulk action: "Set tax class" for selected products. */
+productsRouter.post('/bulk/tax-class', requirePermission('products:write'), async (req, res) => {
+  const { productIds, taxClassId } = body(req, z.object({ productIds: z.array(z.string()).min(1).max(5000), taxClassId: z.string().min(1) }));
+  await assertAssignable(taxClassId);
+  const { count } = await prisma.product.updateMany({ where: { id: { in: productIds } }, data: { taxClassId } });
+  await audit({ actorId: req.user!.id, action: 'product.bulk_tax_class', entity: 'Product', details: { taxClassId, count } });
+  res.json({ updated: count });
 });
 
 productsRouter.post('/:id/adjust-stock', requirePermission('products:write'), async (req, res) => {

@@ -104,7 +104,11 @@ model Product {
   category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   costCents         Int       @default(0)
   priceCents        Int
+  /// Rate comes from the tax class (see TaxClass). Kept only so the release
+  /// can be rolled back; no longer read or written — dropped in a later migration.
   taxRateBps        Int       @default(0)
+  taxClassId        String
+  taxClass          TaxClass  @relation(fields: [taxClassId], references: [id], onDelete: Restrict)
   stockQty          Int       @default(0)
   lowStockThreshold Int       @default(5)
   active            Boolean   @default(true)
@@ -116,7 +120,23 @@ model Product {
 
   @@index([name])
   @@index([categoryId])
+  @@index([taxClassId])
   @@index([updatedAt])
+}
+
+/// A named tax rate (e.g. "VAT 7.5%", "Zero-rated") attached to products.
+/// Rates are integer basis points: 750 = 7.5 %.
+model TaxClass {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  code       String?   @unique
+  rateBps    Int
+  isDefault  Boolean   @default(false)
+  archivedAt DateTime?
+  sortOrder  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  products   Product[]
 }
 
 model Customer {
@@ -189,6 +209,9 @@ model SaleItem {
   discountValue  Int           @default(0)
   discountCents  Int           @default(0)
   taxRateBps     Int
+  /// Snapshots of the product's tax class at the time of sale.
+  taxClassId     String?
+  taxClassName   String?
   taxCents       Int
   totalCents     Int
   refunds        Refund[]

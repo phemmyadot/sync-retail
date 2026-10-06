@@ -12,6 +12,12 @@ import {
   type RawRow,
   type ValidatedRow,
   type ValidationSummary,
+  formatRate,
+  guessRateBps,
+  percentToBps,
+  type TaxClassDTO,
+  type TaxIssue,
+  type TaxMapping,
 } from '@sync-retail/shared';
 import { api, errorMessage } from '@/lib/api';
 import { fmtDate, useMoney } from '@/lib/format';
@@ -45,6 +51,8 @@ export function ImportPage() {
   const [mapping, setMapping] = useState<ColumnMapping | null>(null);
   const [mode, setMode] = useState<ImportMode>('upsert');
   const [validation, setValidation] = useState<{ rows: ValidatedRow[]; summary: ValidationSummary; server: boolean } | null>(null);
+  // Review-step decisions for tax values the importer couldn't place on its own.
+  const [taxMapping, setTaxMapping] = useState<TaxMapping>({});
   const [result, setResult] = useState<CommitResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +78,7 @@ export function ImportPage() {
       setParsed({ fileName: file.name, sheetName, headers, rows });
       setMapping(suggestMapping(headers));
       setValidation(null);
+      setTaxMapping({});
       setResult(null);
       setStep(2);
     } catch (err) {
@@ -84,8 +93,9 @@ export function ImportPage() {
     return parsed.rows.map((r) => Object.fromEntries(cols.map((c) => [c, r[c]])));
   }, [parsed, mapping]);
 
-  const runValidation = async () => {
+  const runValidation = async (nextTaxMapping: TaxMapping = taxMapping) => {
     if (!parsed || !mapping) return;
+    setTaxMapping(nextTaxMapping);
     // Instant local pass first (in-file problems), then the authoritative server pass.
     setValidation({ ...validateImportRows(parsed.rows, mapping, undefined, mode), server: false });
     setStep(3);
@@ -94,7 +104,7 @@ export function ImportPage() {
     try {
       const res = await api<{ rows: ValidatedRow[]; summary: ValidationSummary }>('/import/validate', {
         method: 'POST',
-        body: { rows: slimRows(), mapping, mode },
+        body: { rows: slimRows(), mapping, mode, taxMapping: nextTaxMapping },
       });
       setValidation({ ...res, server: true });
     } catch (err) {
@@ -111,7 +121,7 @@ export function ImportPage() {
     try {
       const res = await api<CommitResult>('/import/commit', {
         method: 'POST',
-        body: { fileName: parsed.fileName, rows: slimRows(), mapping, mode },
+        body: { fileName: parsed.fileName, rows: slimRows(), mapping, mode, taxMapping },
       });
       setResult(res);
       setStep(4);
@@ -179,8 +189,12 @@ export function ImportPage() {
             mode={mode}
             onMode={setMode}
             onBack={reset}
-            onNext={() => void runValidation()}
+            onNext={() => void runValidation({})}
           />
+        )}
+
+        {step === 3 && validation?.server && validation.summary.taxIssues.length > 0 && (
+          <TaxReview issues={validation.summary.taxIssues} busy={busy} onApply={(m) => void runValidation({ ...taxMapping, ...m })} />
         )}
 
         {step === 3 && validation && (
@@ -539,11 +553,111 @@ const Tally = ({ n, label, tone }: { n: number; label: string; tone: string }) =
 
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['SKU', 'Barcode', 'Item Name', 'Category', 'Cost Price', 'Retail Price', 'Tax Rate', 'Stock Qty'],
-    ['COF-0100', '012345678905', 'House Blend 250g', 'Coffee', '6.20', '12.50', '0%', 40],
-    ['BAK-0200', '', 'Almond Croissant', 'Bakery', '1.10', '4.25', '8.25%', 24],
+    ['SKU', 'Barcode', 'Item Name', 'Category', 'Cost Price', 'Retail Price', 'Tax Class', 'Stock Qty'],
+    ['COF-0100', '012345678905', 'House Blend 250g', 'Coffee', '6.20', '12.50', 'Zero-rated', 40],
+    ['BAK-0200', '', 'Almond Croissant', 'Bakery', '1.10', '4.25', 'VAT 7.5%', 24],
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Products');
   XLSX.writeFile(wb, 'sync-retail-import-template.xlsx');
+}
+
+// ─── Tax review (only when some tax values couldn't be placed) ────────────────
+
+type Choice = { kind: 'class'; id: string } | { kind: 'default' } | { kind: 'create'; name: string; pct: string };
+
+function TaxReview({ issues, busy, onApply }: { issues: TaxIssue[]; busy: boolean; onApply: (m: TaxMapping) => void }) {
+  const classes = useQuery({ queryKey: ['tax-classes'], queryFn: () => api<TaxClassDTO[]>('/tax-classes') });
+  const defaultClass = classes.data?.find((c) => c.isDefault);
+  const [choices, setChoices] = useState<Record<string, Choice>>(() =>
+    Object.fromEntries(
+      issues.map((i) => {
+        const guess = guessRateBps(i.raw);
+        // Ambiguous values default to the first matching class; unknown ones to "create".
+        return [i.key, i.kind === 'ambiguous' ? { kind: 'class', id: i.candidates[0] } : { kind: 'create', name: i.raw.trim().slice(0, 40), pct: guess === null ? '' : String(guess / 100) }];
+      }),
+    ),
+  );
+  const set = (key: string, c: Choice) => setChoices((x) => ({ ...x, [key]: c }));
+  const complete = issues.every((i) => {
+    const c = choices[i.key];
+    return c && (c.kind !== 'create' || (c.name.trim() && percentToBps(c.pct) !== null));
+  });
+
+  const apply = () => {
+    const m: TaxMapping = {};
+    for (const i of issues) {
+      const c = choices[i.key];
+      if (c.kind === 'class') m[i.key] = { taxClassId: c.id };
+      else if (c.kind === 'default') m[i.key] = { useDefault: true };
+      else m[i.key] = { create: { name: c.name.trim(), rateBps: percentToBps(c.pct)! } };
+    }
+    onApply(m);
+  };
+
+  return (
+    <section className="mb-8 rounded-md border border-amber/40 bg-ink-2 p-5 animate-rise">
+      <p className="eyebrow text-amber">Tax classes</p>
+      <h3 className="display mt-1 text-3xl">
+        {issues.length} tax value{issues.length === 1 ? '' : 's'} need{issues.length === 1 ? 's' : ''} a decision
+      </h3>
+      <p className="mt-1 text-sm text-dust">These rows are skipped until you choose. Blank cells already use the default class{defaultClass ? ` (${defaultClass.name})` : ''}.</p>
+      <ul className="mt-5 divide-y divide-line border-y border-line">
+        {issues.map((i) => {
+          const c = choices[i.key];
+          const value = c.kind === 'class' ? `class:${c.id}` : c.kind;
+          return (
+            <li key={i.key} className="grid gap-3 py-3 md:grid-cols-[1fr_1.4fr] md:items-center">
+              <div>
+                <p className="font-mono text-bone">“{i.raw}”</p>
+                <p className="text-xs text-dust">
+                  {i.rows} row{i.rows === 1 ? '' : 's'} · {i.kind === 'ambiguous' ? 'matches more than one class' : 'no class with this name'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="field h-10 w-auto min-w-[14rem] py-1"
+                  value={value}
+                  aria-label={`Tax class for ${i.raw}`}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === 'default') set(i.key, { kind: 'default' });
+                    else if (v === 'create') {
+                      const guess = guessRateBps(i.raw);
+                      set(i.key, { kind: 'create', name: i.raw.trim().slice(0, 40), pct: guess === null ? '' : String(guess / 100) });
+                    } else set(i.key, { kind: 'class', id: v.slice(6) });
+                  }}
+                >
+                  {(classes.data ?? [])
+                    .slice()
+                    .sort((a, b) => Number(i.candidates.includes(b.id)) - Number(i.candidates.includes(a.id)))
+                    .map((cl) => (
+                      <option key={cl.id} value={`class:${cl.id}`}>
+                        {cl.name} · {formatRate(cl.rateBps)}
+                      </option>
+                    ))}
+                  <option value="default">Use default{defaultClass ? ` (${defaultClass.name})` : ''}</option>
+                  <option value="create">Create a new class…</option>
+                </select>
+                {c.kind === 'create' && (
+                  <>
+                    <input className="field h-10 w-44 py-1" maxLength={40} value={c.name} onChange={(e) => set(i.key, { ...c, name: e.target.value })} aria-label="New class name" placeholder="Name" />
+                    <span className="relative">
+                      <input className="field h-10 w-20 py-1 pr-6 text-right font-mono" inputMode="decimal" value={c.pct} onChange={(e) => set(i.key, { ...c, pct: e.target.value.replace(/[^\d.]/g, '') })} aria-label="New class rate %" placeholder="Rate" />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-dust">%</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-4 flex justify-end">
+        <Button variant="primary" icon="check" loading={busy} disabled={!complete} onClick={apply}>
+          Apply and re-check rows
+        </Button>
+      </div>
+    </section>
+  );
 }

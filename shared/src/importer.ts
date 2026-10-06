@@ -3,6 +3,7 @@
  * Runs in the browser for instant preview and on the server as the authority.
  */
 import { parseMoneyToCents } from './pricing';
+import { resolveTaxValue, taxValueKey, type TaxClassDTO, type TaxMapping } from './tax';
 
 export const IMPORT_FIELDS = [
   { key: 'sku', label: 'SKU', required: true, aliases: ['sku', 'item code', 'product code', 'code', 'article', 'item #', 'item no'] },
@@ -11,7 +12,8 @@ export const IMPORT_FIELDS = [
   { key: 'category', label: 'Category', required: false, aliases: ['category', 'dept', 'department', 'group', 'section', 'type'] },
   { key: 'costPrice', label: 'Cost price', required: false, aliases: ['cost', 'cost price', 'unit cost', 'buy price', 'purchase price', 'wholesale'] },
   { key: 'retailPrice', label: 'Retail price', required: true, aliases: ['price', 'retail', 'retail price', 'sell price', 'selling price', 'msrp', 'unit price', 'sale price'] },
-  { key: 'taxRate', label: 'Tax rate', required: false, aliases: ['tax', 'tax rate', 'vat', 'tax %', 'gst', 'sales tax'] },
+  // Tax class by name ("VAT 7.5%"), code ("VAT") or rate ("7.5%"); blank = store default.
+  { key: 'taxClass', label: 'Tax class', required: false, aliases: ['tax class', 'tax', 'vat', 'tax rate', 'tax %', 'gst', 'sales tax', 'tax code'] },
   { key: 'stockQuantity', label: 'Stock qty', required: false, aliases: ['stock', 'qty', 'quantity', 'on hand', 'inventory', 'stock qty', 'stock quantity', 'count'] },
 ] as const;
 
@@ -27,7 +29,14 @@ export interface NormalizedProduct {
   category: string | null;
   costCents: number | null;
   priceCents: number;
-  taxRateBps: number | null;
+  /** The tax cell as typed (null = blank). */
+  taxValue: string | null;
+  /**
+   * Resolved class: an id, `null` = blank → default class for new products /
+   * unchanged for existing ones, or `{ create }` when the admin chose to create
+   * a class in the review step. Undefined when no tax context was supplied.
+   */
+  tax?: { taxClassId: string } | { useDefault: true } | { create: { name: string; rateBps: number } };
   stockQty: number | null;
 }
 
@@ -51,6 +60,22 @@ export interface ValidationSummary {
   creates: number;
   updates: number;
   warnings: number;
+  /** Distinct tax values that need a decision in the review step. */
+  taxIssues: TaxIssue[];
+}
+
+export interface TaxIssue {
+  key: string; // normalised value (see taxValueKey)
+  raw: string; // as first seen in the file
+  rows: number;
+  kind: 'unresolved' | 'ambiguous';
+  candidates: string[]; // tax class ids sharing the rate (ambiguous)
+}
+
+/** Tax classes + review-step choices; omit to skip tax resolution entirely. */
+export interface ImportTaxContext {
+  classes: Pick<TaxClassDTO, 'id' | 'name' | 'code' | 'rateBps' | 'archived'>[];
+  mapping?: TaxMapping;
 }
 
 export interface ExistingCatalog {
@@ -92,16 +117,6 @@ export function missingRequiredFields(mapping: ColumnMapping): ImportFieldKey[] 
 
 const str = (v: unknown): string => (v === null || v === undefined ? '' : String(v).trim());
 
-/** "8.25%" → 825; "8.25" → 825; "0.0825" → 825 (fractions ≤ 1 are treated as ratios). */
-export function parseTaxRateBps(v: unknown): number | null {
-  const s = str(v);
-  if (!s) return null;
-  const n = Number(s.replace(/[%\s]/g, ''));
-  if (!Number.isFinite(n)) return NaN;
-  if (s.includes('%')) return Math.round(n * 100);
-  return n > 0 && n <= 1 ? Math.round(n * 10_000) : Math.round(n * 100);
-}
-
 function normalizeRow(raw: RawRow, mapping: ColumnMapping) {
   const get = (k: ImportFieldKey) => (mapping[k] ? raw[mapping[k] as string] : undefined);
   const errors: string[] = [];
@@ -129,9 +144,7 @@ function normalizeRow(raw: RawRow, mapping: ColumnMapping) {
   else if (costCents !== null && priceCents !== null && costCents > priceCents)
     warnings.push('Cost is higher than retail price (selling at a loss)');
 
-  const taxRateBps = parseTaxRateBps(get('taxRate'));
-  if (Number.isNaN(taxRateBps)) errors.push(`Tax rate "${str(get('taxRate'))}" is not a number`);
-  else if (taxRateBps !== null && (taxRateBps < 0 || taxRateBps > 5000)) errors.push('Tax rate must be between 0% and 50%');
+  const taxValue = str(get('taxClass')) || null;
 
   const stockRaw = str(get('stockQuantity'));
   let stockQty: number | null = null;
@@ -154,7 +167,7 @@ function normalizeRow(raw: RawRow, mapping: ColumnMapping) {
         category,
         costCents,
         priceCents: priceCents as number,
-        taxRateBps: taxRateBps as number | null,
+        taxValue,
         stockQty,
       };
   return { data, errors, warnings, sku, barcode, name };
@@ -165,8 +178,10 @@ export function validateImportRows(
   mapping: ColumnMapping,
   existing: ExistingCatalog = { skus: new Map(), barcodes: new Map() },
   mode: ImportMode = 'upsert',
+  tax?: ImportTaxContext,
 ): { rows: ValidatedRow[]; summary: ValidationSummary } {
   const seenSku = new Map<string, number>();
+  const issues = new Map<string, TaxIssue>();
   const seenBarcode = new Map<string, number>();
   const out: ValidatedRow[] = [];
 
@@ -189,6 +204,28 @@ export function validateImportRows(
         errors.push(`Barcode already belongs to existing SKU ${owner}`);
     }
 
+    // Tax class: resolve, or apply the admin's review-step choice, or flag it.
+    if (tax && data) {
+      const r = resolveTaxValue(data.taxValue, tax.classes);
+      if (r.kind === 'class') data.tax = { taxClassId: r.taxClassId };
+      else if (r.kind === 'default') data.tax = { useDefault: true };
+      else {
+        const key = taxValueKey(data.taxValue!);
+        const choice = tax.mapping?.[key];
+        if (choice) data.tax = choice;
+        else {
+          const issue = issues.get(key) ?? { key, raw: data.taxValue!, rows: 0, kind: r.kind, candidates: r.kind === 'ambiguous' ? r.candidates : [] };
+          issue.rows++;
+          issues.set(key, issue);
+          errors.push(
+            r.kind === 'ambiguous'
+              ? `Tax "${data.taxValue}" matches more than one tax class — choose one in the review step`
+              : `Unknown tax class "${data.taxValue}" — map it in the review step`,
+          );
+        }
+      }
+    }
+
     let action: RowAction = 'create';
     if (sku && existing.skus.has(sku)) {
       if (mode === 'createOnly') errors.push('SKU already exists in catalog');
@@ -208,6 +245,7 @@ export function validateImportRows(
     creates: out.filter((r) => r.action === 'create').length,
     updates: out.filter((r) => r.action === 'update').length,
     warnings: out.filter((r) => r.warnings.length > 0).length,
+    taxIssues: [...issues.values()].sort((a, b) => b.rows - a.rows),
   };
   return { rows: out, summary };
 }

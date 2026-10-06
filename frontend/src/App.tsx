@@ -17,9 +17,11 @@ import { ReportsPage } from '@/features/reports/ReportsPage';
 import { AdminPage } from '@/features/admin/AdminPage';
 import { AuditPage } from '@/features/admin/AuditPage';
 
-function Guard({ perm, children }: { perm: Permission; children: ReactNode }) {
+/** Renders children when the user has the permission (or any of a list). */
+function Guard({ perm, children }: { perm: Permission | Permission[]; children: ReactNode }) {
   const can = useCan();
-  return can(perm) ? children : <Navigate to="/pos" replace />;
+  const allowed = Array.isArray(perm) ? perm.some(can) : can(perm);
+  return allowed ? children : <Navigate to="/pos" replace />;
 }
 
 export function App() {
@@ -41,7 +43,7 @@ export function App() {
             <Route path="/inventory/import" element={<Guard perm="inventory:import"><ImportPage /></Guard>} />
             <Route path="/reports" element={<Guard perm="reports:read"><ReportsPage /></Guard>} />
             <Route path="/audit" element={<Guard perm="audit:read"><AuditPage /></Guard>} />
-            <Route path="/settings" element={<Guard perm="users:manage"><AdminPage /></Guard>} />
+            <Route path="/settings" element={<Guard perm={['users:manage', 'settings:write', 'tax:manage', 'devices:manage']}><AdminPage /></Guard>} />
             <Route path="*" element={<Navigate to="/pos" replace />} />
           </Route>
         )}

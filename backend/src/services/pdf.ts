@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
-import { formatMoney, PAYMENT_LABEL, type ReportSummary, type StoreSettings } from '@sync-retail/shared';
+import { formatMoney, formatRate, PAYMENT_LABEL, type ReportSummary, type StoreSettings } from '@sync-retail/shared';
 
 // PDFKit's built-in fonts are WinAnsi-only (no ₦, ₹, ₵, ₱ …), so embed
 // DejaVu, which covers every currency symbol. Fonts are subset per document.
@@ -90,6 +90,8 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
     r.topProducts.map((p) => [p.name, p.sku, String(p.quantity), fmt(p.revenueCents)]));
   table('Categories', ['Category', 'Qty', 'Revenue'], [0.6, 0.15, 0.25],
     r.categories.map((c) => [c.name, String(c.quantity), fmt(c.revenueCents)]));
+  table('Tax by class', ['Tax class', 'Rate', 'Taxable', 'Tax'], [0.4, 0.15, 0.25, 0.2],
+    r.taxes.map((t) => [t.name, formatRate(t.rateBps), fmt(t.taxableCents), fmt(t.taxCents)]));
   table('Payment methods', ['Method', 'Count', 'Amount'], [0.6, 0.15, 0.25],
     r.payments.map((p) => [PAYMENT_LABEL[p.method], String(p.count), fmt(p.amountCents)]));
   table('Staff performance', ['Name', 'Sales', 'Net', 'Avg', 'Voids', 'Overr.'], [0.3, 0.1, 0.2, 0.2, 0.1, 0.1],

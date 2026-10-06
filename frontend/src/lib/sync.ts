@@ -1,4 +1,4 @@
-import type { CategoryDTO, CreateSaleInput, ProductDTO, SaleDTO, StoreSettings } from '@sync-retail/shared';
+import type { CategoryDTO, CreateSaleInput, ProductDTO, SaleDTO, StoreSettings, TaxClassDTO } from '@sync-retail/shared';
 import { api, ApiError, NetworkError } from './api';
 import { getMeta, localDb, setMeta, type OutboxSale } from './db';
 import { useAuth } from '@/store/auth';
@@ -21,15 +21,19 @@ export async function pullCatalog(): Promise<boolean> {
   if (!useAuth.getState().token) return false;
   const since = await getMeta<string>('catalogSyncedAt');
   try {
-    const res = await api<{ serverTime: string; full: boolean; products: ProductDTO[]; categories: CategoryDTO[]; settings: StoreSettings }>(
+    const res = await api<{ serverTime: string; full: boolean; products: ProductDTO[]; categories: CategoryDTO[]; settings: StoreSettings; taxClasses?: TaxClassDTO[] }>(
       '/sync/catalog',
       { query: { since } },
     );
-    await localDb.transaction('rw', localDb.products, localDb.categories, localDb.meta, async () => {
+    await localDb.transaction('rw', [localDb.products, localDb.categories, localDb.taxClasses, localDb.meta], async () => {
       if (res.full) await localDb.products.clear();
       await localDb.products.bulkPut(res.products);
       await localDb.categories.clear();
       await localDb.categories.bulkPut(res.categories);
+      if (res.taxClasses) {
+        await localDb.taxClasses.clear();
+        await localDb.taxClasses.bulkPut(res.taxClasses);
+      }
       await setMeta('settings', res.settings);
       await setMeta('catalogSyncedAt', res.serverTime);
     });

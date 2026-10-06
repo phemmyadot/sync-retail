@@ -1,4 +1,4 @@
-import type { PaymentMethod, ReportGranularity, ReportSummary } from '@sync-retail/shared';
+import { formatRate, type PaymentMethod, type ReportGranularity, type ReportSummary } from '@sync-retail/shared';
 import { prisma } from '../lib/db';
 
 export interface ReportRange {
@@ -45,7 +45,7 @@ const n = (v: unknown) => Number(v ?? 0);
 export async function buildReport({ from, to, granularity }: ReportRange): Promise<ReportSummary> {
   const counted = { createdAt: { gte: from, lte: to }, status: { not: 'VOIDED' as const } };
 
-  const [agg, itemAgg, series, top, categories, payments, workers, voids, overrides, margin] = await Promise.all([
+  const [agg, itemAgg, series, top, categories, payments, workers, voids, overrides, taxes, margin] = await Promise.all([
     prisma.sale.aggregate({
       where: counted,
       _sum: { totalCents: true, taxCents: true, discountCents: true, refundedCents: true },
@@ -87,6 +87,15 @@ export async function buildReport({ from, to, granularity }: ReportRange): Promi
     }),
     prisma.sale.groupBy({ by: ['cashierId'], where: { createdAt: { gte: from, lte: to }, status: 'VOIDED' }, _count: { _all: true } }),
     prisma.overrideLog.groupBy({ by: ['requestedById'], where: { createdAt: { gte: from, lte: to } }, _count: { _all: true } }),
+    // Tax by class, from the per-line snapshots (historical rates stay correct),
+    // net of returned quantities.
+    prisma.$queryRaw<{ name: string | null; rate: number; taxable: string | null; tax: string | null }[]>`
+      SELECT i."taxClassName" AS name, i."taxRateBps" AS rate,
+             SUM(ROUND((i."totalCents" - i."taxCents")::numeric * (i.quantity - i."returnedQty") / NULLIF(i.quantity, 0))) AS taxable,
+             SUM(ROUND(i."taxCents"::numeric * (i.quantity - i."returnedQty") / NULLIF(i.quantity, 0))) AS tax
+      FROM "SaleItem" i JOIN "Sale" s ON s.id = i."saleId"
+      WHERE s."createdAt" BETWEEN ${from} AND ${to} AND s.status <> 'VOIDED'
+      GROUP BY 1, 2 ORDER BY 2 DESC, 1`,
     prisma.$queryRaw<{ margin: bigint | null }[]>`
       SELECT SUM((i."totalCents" - i."taxCents") - i."costCents" * i.quantity) AS margin
       FROM "SaleItem" i JOIN "Sale" s ON s.id = i."saleId"
@@ -117,6 +126,7 @@ export async function buildReport({ from, to, granularity }: ReportRange): Promi
     series: series.map((r) => ({ bucket: r.bucket.toISOString(), totalCents: n(r.total), transactions: n(r.tx) })),
     topProducts: top.map((r) => ({ productId: r.productId, name: r.name, sku: r.sku, quantity: n(r.qty), revenueCents: n(r.revenue) })),
     categories: categories.map((r) => ({ name: r.name ?? 'Uncategorised', revenueCents: n(r.revenue), quantity: n(r.qty) })),
+    taxes: taxes.map((t) => ({ name: t.name ?? `Tax ${formatRate(t.rate)}`, rateBps: t.rate, taxableCents: n(t.taxable), taxCents: n(t.tax) })),
     payments: payments
       .map((p) => ({ method: p.method as PaymentMethod, amountCents: p._sum.amountCents ?? 0, count: p._count._all }))
       .sort((a, b) => b.amountCents - a.amountCents),
@@ -171,6 +181,9 @@ export function reportToCsv(r: ReportSummary, currency: string): string {
     [],
     ['Category', 'Qty', `Revenue ex tax ${c}`],
     ...r.categories.map((c) => [c.name, c.quantity, money(c.revenueCents)]),
+    [],
+    ['Tax class', 'Rate', `Taxable ${c}`, `Tax ${c}`],
+    ...r.taxes.map((t) => [t.name, formatRate(t.rateBps), money(t.taxableCents), money(t.taxCents)]),
     [],
     ['Payment method', 'Count', `Amount ${c}`],
     ...r.payments.map((p) => [p.method, p.count, money(p.amountCents)]),

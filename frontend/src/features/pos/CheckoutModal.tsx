@@ -9,6 +9,7 @@ import {
   type CustomerDTO,
   type PaymentMethod,
   type SaleTenderInput,
+  type TaxBreakdownLine,
 } from '@sync-retail/shared';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/primitives';
@@ -20,6 +21,8 @@ import { useSettings } from '@/hooks/useSettings';
 interface Props {
   open: boolean;
   totalCents: number;
+  /** Subtotal / discounts / per-class tax, shown under the amount due. */
+  breakdown?: { subtotalCents: number; discountCents: number; taxes: TaxBreakdownLine[] };
   customer: CustomerDTO | null;
   onClose: () => void;
   onProgress: (paidCents: number, remainingCents: number) => void;
@@ -29,7 +32,7 @@ interface Props {
 const METHOD_ICON: Record<PaymentMethod, IconName> = { CASH: 'cash', CARD: 'card', LOYALTY: 'star' };
 
 /** Split-tender checkout: any mix of cash, card and loyalty points. */
-export function CheckoutModal({ open, totalCents, customer, onClose, onProgress, onComplete }: Props) {
+export function CheckoutModal({ open, totalCents, breakdown, customer, onClose, onProgress, onComplete }: Props) {
   const money = useMoney();
   const { data: settings } = useSettings();
   const loyalty = settings!.loyalty;
@@ -124,6 +127,32 @@ export function CheckoutModal({ open, totalCents, customer, onClose, onProgress,
               {money(remaining)}
             </p>
             <p className="num mt-2 text-sm text-dust">of {money(totalCents)}</p>
+            {breakdown && (
+              <dl className="mt-4 space-y-1 border-t border-line pt-3 text-sm">
+                <div className="flex justify-between text-dust">
+                  <dt>Subtotal</dt>
+                  <dd className="num">{money(breakdown.subtotalCents)}</dd>
+                </div>
+                {breakdown.discountCents > 0 && (
+                  <div className="flex justify-between text-amber">
+                    <dt>Discounts</dt>
+                    <dd className="num">−{money(breakdown.discountCents)}</dd>
+                  </div>
+                )}
+                {breakdown.taxes.map((t) => (
+                  <div key={t.taxClassId ?? t.name} className="flex justify-between text-dust">
+                    <dt>
+                      {t.name} <span className="text-xs">on {money(t.taxableCents)}</span>
+                    </dt>
+                    <dd className="num">{money(t.taxCents)}</dd>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-line pt-1 font-medium text-bone">
+                  <dt>Total due</dt>
+                  <dd className="num">{money(totalCents)}</dd>
+                </div>
+              </dl>
+            )}
             {summary.changeCents > 0 && (
               <div className="mt-4 flex items-center justify-between rounded-sm bg-amber px-3 py-2 text-amber-ink animate-pop">
                 <span className="font-semibold">Change due</span>

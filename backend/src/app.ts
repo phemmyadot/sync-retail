@@ -16,6 +16,7 @@ import { importRouter } from './routes/imports';
 import { auditRouter, publicSettings, settingsRouter, syncRouter } from './routes/misc';
 import { setupRouter } from './routes/setup';
 import { diagnosticsRouter } from './routes/diagnostics';
+import { taxRouter } from './routes/tax';
 import { requireDevice } from './network/deviceAuth';
 import { devicesRouter, pairRouter } from './network/routes';
 
@@ -46,6 +47,7 @@ export function createApp() {
   api.use('/users', usersRouter);
   api.use('/products', productsRouter);
   api.use('/categories', categoriesRouter);
+  api.use('/tax-classes', taxRouter);
   api.use('/customers', customersRouter);
   api.use('/sales', salesRouter);
   api.use('/overrides', overridesRouter);

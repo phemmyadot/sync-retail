@@ -135,7 +135,11 @@ export function CustomerDisplay() {
           <dl className="space-y-3 text-2xl">
             <Row k="Subtotal" v={money(cart.subtotalCents)} />
             {cart.discountCents > 0 && <Row k="Savings" v={`−${money(cart.discountCents)}`} accent />}
-            <Row k="Tax" v={money(cart.taxCents)} />
+            {cart.taxes?.length > 1 ? (
+              cart.taxes.map((t) => <Row key={t.name} k={t.name} v={money(t.taxCents)} />)
+            ) : (
+              <Row k={cart.taxes?.[0]?.name ?? 'Tax'} v={money(cart.taxCents)} />
+            )}
             {checkout && checkout.paidCents > 0 && <Row k="Paid" v={`−${money(checkout.paidCents)}`} accent />}
           </dl>
 

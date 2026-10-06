@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { PAYMENT_LABEL, type PaymentMethod, type SaleDTO } from '@sync-retail/shared';
+import { PAYMENT_LABEL, taxBreakdown, taxMarkers, type LineTotals, type PaymentMethod, type SaleDTO, type TaxBreakdownLine } from '@sync-retail/shared';
 import { useMoney } from '@/lib/format';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -8,10 +8,12 @@ export interface ReceiptData {
   createdAt: string;
   cashierName: string;
   customer: { name: string; pointsBalance?: number } | null;
-  lines: { name: string; quantity: number; unitPriceCents: number; discountCents: number; totalCents: number; returnedQty?: number }[];
+  lines: { name: string; quantity: number; unitPriceCents: number; discountCents: number; totalCents: number; returnedQty?: number; marker?: string }[];
   subtotalCents: number;
   discountCents: number;
   taxCents: number;
+  /** Per-class tax summary; omitted for receipts made before tax classes. */
+  taxes?: TaxBreakdownLine[];
   totalCents: number;
   tenders: { method: PaymentMethod; amountCents: number; tenderedCents?: number | null; pointsUsed?: number }[];
   changeCents: number;
@@ -21,35 +23,51 @@ export interface ReceiptData {
   pendingSync?: boolean;
 }
 
-export const saleToReceipt = (s: SaleDTO): ReceiptData => ({
+/** Tax summary + per-line markers from a stored sale (uses the lines' snapshots). */
+function saleTaxes(s: SaleDTO) {
+  const lines = s.items.map((i) => ({ unitPriceCents: i.unitPriceCents, quantity: i.quantity, taxRateBps: i.taxRateBps, taxClassId: i.taxClassId, taxClassName: i.taxClassName }));
+  const totals = { lines: s.items.map((i) => ({ netCents: i.totalCents - i.taxCents, taxCents: i.taxCents }) as LineTotals) };
+  const taxes = taxBreakdown(lines, totals);
+  const m = taxMarkers(taxes);
+  return { taxes, markers: lines.map((l) => m.get(l.taxClassId ?? `rate:${l.taxRateBps}`) ?? '') };
+}
+
+export const saleToReceipt = (s: SaleDTO): ReceiptData => {
+  const { taxes, markers } = saleTaxes(s);
+  return {
   receiptNo: s.receiptNo,
   createdAt: s.createdAt,
   cashierName: s.cashier.name,
   customer: s.customer,
-  lines: s.items.map((i) => ({
+  lines: s.items.map((i, idx) => ({
     name: i.name,
     quantity: i.quantity,
     unitPriceCents: i.unitPriceCents,
     discountCents: i.discountCents,
     totalCents: i.totalCents - i.taxCents,
     returnedQty: i.returnedQty,
+    marker: markers[idx],
   })),
   subtotalCents: s.subtotalCents,
   discountCents: s.discountCents,
   taxCents: s.taxCents,
+  taxes,
   totalCents: s.totalCents,
   tenders: s.payments,
   changeCents: s.payments.reduce((a, p) => a + p.changeCents, 0),
   pointsEarned: s.pointsEarned,
   status: s.status,
   refundedCents: s.refundedCents,
-});
+  };
+};
 
 /** Printable thermal receipt. `print-area` is the only thing visible when printing. */
 export function Receipt({ data, animate }: { data: ReceiptData; animate?: boolean }) {
   const money = useMoney();
   const { data: settings } = useSettings();
   const voided = data.status === 'VOIDED';
+  // Line markers (A, B…) only help when the receipt mixes tax classes.
+  const multiClass = (data.taxes?.length ?? 0) > 1;
 
   return (
     <div className={clsx('print-area paper tear-both relative mx-auto w-full max-w-[22rem] px-6 font-mono text-[0.8rem] leading-relaxed', animate && 'animate-print')}>
@@ -72,7 +90,10 @@ export function Receipt({ data, animate }: { data: ReceiptData; animate?: boolea
           <li key={i} className="py-0.5">
             <div className="flex justify-between gap-3">
               <span className="truncate">{l.name}</span>
-              <span>{money(l.totalCents)}</span>
+              <span>
+                {money(l.totalCents)}
+                {multiClass && l.marker && <span className="ml-1 text-paper-dim">{l.marker}</span>}
+              </span>
             </div>
             <div className="flex justify-between text-paper-dim">
               <span>
@@ -87,7 +108,19 @@ export function Receipt({ data, animate }: { data: ReceiptData; animate?: boolea
       <div className="dotted-rule my-3 text-paper-dim" />
       <Line k="Subtotal" v={money(data.subtotalCents)} />
       {data.discountCents > 0 && <Line k="Discounts" v={`−${money(data.discountCents)}`} />}
-      <Line k="Tax" v={money(data.taxCents)} />
+      {!data.taxes?.length ? (
+        <Line k="Tax" v={money(data.taxCents)} />
+      ) : (
+        data.taxes.map((t, i) => (
+          <div key={t.taxClassId ?? t.name} className="flex justify-between gap-2">
+            <span className="min-w-0 truncate">
+              {multiClass && `${String.fromCharCode(65 + i)} `}
+              {t.name} <span className="text-paper-dim">on {money(t.taxableCents)}</span>
+            </span>
+            <span>{money(t.taxCents)}</span>
+          </div>
+        ))
+      )}
       <div className="mt-1 flex justify-between border-y-2 border-paper-ink py-1 text-base font-bold">
         <span>TOTAL</span>
         <span>{money(data.totalCents)}</span>

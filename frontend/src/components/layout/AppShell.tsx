@@ -11,7 +11,7 @@ import { toast } from '@/store/toast';
 import { Icon, type IconName } from '../ui/Icon';
 import { Avatar } from '../ui/primitives';
 
-const NAV: { to: string; label: string; icon: IconName; perm?: Permission }[] = [
+const NAV: { to: string; label: string; icon: IconName; perm?: Permission | Permission[] }[] = [
   { to: '/pos', label: 'Register', icon: 'register' },
   { to: '/sales', label: 'Sales', icon: 'receipt' },
   { to: '/customers', label: 'Customers', icon: 'users' },
@@ -19,7 +19,8 @@ const NAV: { to: string; label: string; icon: IconName; perm?: Permission }[] = 
   { to: '/inventory/import', label: 'Import', icon: 'upload', perm: 'inventory:import' },
   { to: '/reports', label: 'Reports', icon: 'chart', perm: 'reports:read' },
   { to: '/audit', label: 'Audit', icon: 'shield', perm: 'audit:read' },
-  { to: '/settings', label: 'Admin', icon: 'settings', perm: 'users:manage' },
+  // Managers see Admin too (Tax, Registers); each tab checks its own permission.
+  { to: '/settings', label: 'Admin', icon: 'settings', perm: ['users:manage', 'settings:write', 'tax:manage', 'devices:manage'] },
 ];
 
 export function AppShell() {
@@ -29,7 +30,7 @@ export function AppShell() {
 
   useEffect(() => startSyncLoop(), []);
 
-  const items = NAV.filter((n) => !n.perm || can(n.perm));
+  const items = NAV.filter((n) => !n.perm || (Array.isArray(n.perm) ? n.perm.some(can) : can(n.perm)));
 
   return (
     <div className="flex h-full flex-col md:flex-row">

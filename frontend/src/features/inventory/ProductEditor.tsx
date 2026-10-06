@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { CategoryDTO, ProductDTO } from '@sync-retail/shared';
+import { formatRate, type CategoryDTO, type ProductDTO, type TaxClassDTO } from '@sync-retail/shared';
 import { api, errorMessage } from '@/lib/api';
 import { centsToInput, fmtDate, inputToCents } from '@/lib/format';
 import { toast } from '@/store/toast';
@@ -33,7 +33,7 @@ export function ProductEditor({ product, categories, readOnly, onClose, onSaved 
     categoryId: product?.categoryId ?? '',
     cost: centsToInput(product?.costCents ?? 0),
     price: centsToInput(product?.priceCents ?? 0),
-    tax: String((product?.taxRateBps ?? 0) / 100),
+    taxClassId: product?.taxClassId ?? '',
     stock: String(product?.stockQty ?? 0),
     low: String(product?.lowStockThreshold ?? 5),
   });
@@ -42,6 +42,8 @@ export function ProductEditor({ product, categories, readOnly, onClose, onSaved 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const taxClasses = useQuery({ queryKey: ['tax-classes'], queryFn: () => api<TaxClassDTO[]>('/tax-classes') });
+  const defaultClassId = taxClasses.data?.find((c) => c.isDefault)?.id ?? '';
   const detail = useQuery({
     queryKey: ['product', product?.id],
     queryFn: () => api<ProductDTO & { movements: Movement[] }>(`/products/${product!.id}`),
@@ -63,7 +65,7 @@ export function ProductEditor({ product, categories, readOnly, onClose, onSaved 
         categoryId: form.categoryId || null,
         costCents: inputToCents(form.cost),
         priceCents: inputToCents(form.price),
-        taxRateBps: Math.round(Number(form.tax) * 100),
+        ...((form.taxClassId || defaultClassId) ? { taxClassId: form.taxClassId || defaultClassId } : {}),
         lowStockThreshold: Number(form.low) || 0,
       };
       if (isNew) await api('/products', { method: 'POST', body: { ...body, stockQty: Number(form.stock) || 0 } });
@@ -117,7 +119,17 @@ export function ProductEditor({ product, categories, readOnly, onClose, onSaved 
           </div>
           <Input label="Cost price" inputMode="decimal" value={form.cost} onChange={set('cost')} />
           <Input label="Retail price" inputMode="decimal" required value={form.price} onChange={set('price')} />
-          <Input label="Tax rate %" inputMode="decimal" value={form.tax} onChange={set('tax')} />
+          <div>
+            <Label htmlFor="tax-class">Tax class</Label>
+            <select id="tax-class" className="field" value={form.taxClassId || defaultClassId} onChange={set('taxClassId')}>
+              {(taxClasses.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {formatRate(c.rateBps)}
+                  {c.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <Input label="Low-stock alert at" inputMode="numeric" value={form.low} onChange={set('low')} />
           {isNew && <Input label="Opening stock" inputMode="numeric" value={form.stock} onChange={set('stock')} />}
         </fieldset>

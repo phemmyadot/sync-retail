@@ -10,6 +10,7 @@ import { formatRecoveryKey, generateBackupKey, saveBackupKey } from '../services
 import { saveSettings } from '../services/settings';
 import { signSession } from '../services/tokens';
 import { refreshAdvertisement } from '../network/advertise';
+import { ensureStarterClasses } from '../services/taxClasses';
 
 /**
  * First-run store setup. Only available while the database has no users,
@@ -75,6 +76,8 @@ setupRouter.post('/', lockout.guard, async (req, res) => {
       select: { id: true, name: true, email: true, role: true, color: true },
     });
     const stored = await saveBackupKey(key, input.passphrase, tx);
+    // Starter tax classes for the store's currency (NGN: VAT 7.5% default, Zero-rated, Exempt).
+    await ensureStarterClasses(input.store.currency, tx);
     await audit(
       { actorId: owner.id, action: 'store.setup', entity: 'System', details: { storeName: input.store.name, currency: input.store.currency, keyId: stored.keyId, passphrase: !!input.passphrase } },
       tx,
