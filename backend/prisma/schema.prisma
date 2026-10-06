@@ -42,6 +42,7 @@ enum OverrideAction {
   VOID_SALE
   RETURN_ITEM
   EDIT_SALE
+  KIOSK_EXIT
 }
 
 enum OverrideOutcome {

@@ -29,6 +29,7 @@ export const OVERRIDE_ACTIONS = [
   'VOID_SALE',
   'RETURN_ITEM',
   'EDIT_SALE',
+  'KIOSK_EXIT',
 ] as const;
 export type OverrideAction = (typeof OVERRIDE_ACTIONS)[number];
 
@@ -40,6 +41,7 @@ export const OVERRIDE_LABEL: Record<OverrideAction, string> = {
   VOID_SALE: 'Void completed sale',
   RETURN_ITEM: 'Return / refund item',
   EDIT_SALE: 'Edit completed sale',
+  KIOSK_EXIT: 'Unlock kiosk for maintenance',
 };
 
 export type SaleStatus = 'COMPLETED' | 'VOIDED' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
@@ -87,6 +89,8 @@ export const OVERRIDE_BYPASS: Record<OverrideAction, Permission> = {
   VOID_SALE: 'sales:void',
   RETURN_ITEM: 'sales:return',
   EDIT_SALE: 'sales:edit',
+  // Never skipped in the UI: unlocking a kiosk always asks for a PIN.
+  KIOSK_EXIT: 'devices:manage',
 };
 
 export interface StoreSettings {
@@ -98,6 +102,8 @@ export interface StoreSettings {
   agentMaxDiscountBps: number;
   receiptFooter: string;
   promoBanners: { title: string; subtitle: string }[];
+  /** Registers return to the PIN screen after this many idle minutes (0 = never). The open sale is kept. */
+  idleLockMinutes: number;
 }
 
 export interface LoyaltyConfig {
@@ -116,6 +122,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   loyalty: { pointsPerDollar: 1, redeemBlockPoints: 100, redeemBlockValueCents: 500 },
   agentMaxDiscountBps: 1000,
   receiptFooter: 'Thank you — come back soon.',
+  idleLockMinutes: 5,
   promoBanners: [
     { title: 'Members earn on every purchase', subtitle: 'Earn {earnRate} points for every {symbol}1 you spend.' },
     { title: '{redeemPoints} points = {redeemValue} off', subtitle: 'Redeem your rewards at any register.' },

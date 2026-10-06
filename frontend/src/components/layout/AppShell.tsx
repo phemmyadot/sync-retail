@@ -10,6 +10,7 @@ import { openCustomerDisplay } from '@/lib/platform';
 import { toast } from '@/store/toast';
 import { Icon, type IconName } from '../ui/Icon';
 import { Avatar } from '../ui/primitives';
+import { useKioskHold } from '@/features/kiosk/useKioskHold';
 
 const NAV: { to: string; label: string; icon: IconName; perm?: Permission | Permission[] }[] = [
   { to: '/pos', label: 'Register', icon: 'register' },
@@ -27,6 +28,7 @@ export function AppShell() {
   const user = useAuth((s) => s.user)!;
   const lock = useAuth((s) => s.lock);
   const can = useCan();
+  const kioskHold = useKioskHold();
 
   useEffect(() => startSyncLoop(), []);
 
@@ -40,7 +42,7 @@ export function AppShell() {
         className="order-last flex shrink-0 border-t border-line bg-ink md:order-first md:w-[88px] md:flex-col md:border-r md:border-t-0"
       >
         <div className="hidden h-[72px] items-center justify-center border-b border-line md:flex">
-          <span className="display text-3xl italic text-amber" aria-label="Sync Retail">
+          <span className="display select-none text-3xl italic text-amber" aria-label="Sync Retail" {...kioskHold}>
             S<span className="text-bone">r</span>
           </span>
         </div>

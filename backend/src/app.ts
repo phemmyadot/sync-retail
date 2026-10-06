@@ -15,6 +15,7 @@ import { reportsRouter } from './routes/reports';
 import { importRouter } from './routes/imports';
 import { auditRouter, publicSettings, settingsRouter, syncRouter } from './routes/misc';
 import { setupRouter } from './routes/setup';
+import { kioskRouter } from './routes/kiosk';
 import { diagnosticsRouter } from './routes/diagnostics';
 import { taxRouter } from './routes/tax';
 import { requireDevice } from './network/deviceAuth';
@@ -41,6 +42,8 @@ export function createApp() {
   // Login-free screens (lock screen, customer display) need currency + branding.
   app.get('/api/settings/public', publicSettings);
   app.use('/api/setup', setupRouter);
+  // Unlock works from the lock screen; the other kiosk routes authenticate themselves.
+  app.use('/api/kiosk', kioskRouter);
 
   const api = express.Router();
   api.use(authenticate);

@@ -26,6 +26,7 @@ export const publicSettings: RequestHandler = async (_req, res) => {
     loyalty: s.loyalty,
     promoBanners: s.promoBanners,
     receiptFooter: s.receiptFooter,
+    idleLockMinutes: s.idleLockMinutes,
   });
 };
 
@@ -43,6 +44,7 @@ settingsRouter.put('/', requirePermission('settings:write'), async (req, res) =>
         locale: z.string().min(2).max(20),
         agentMaxDiscountBps: z.number().int().min(0).max(10_000),
         receiptFooter: z.string().max(300),
+        idleLockMinutes: z.number().int().min(0).max(240),
         loyalty: z.object({
           pointsPerDollar: z.number().int().min(0).max(100),
           redeemBlockPoints: z.number().int().min(1),

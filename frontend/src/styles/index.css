@@ -191,3 +191,15 @@
     animation: none !important;
   }
 }
+
+/* Kiosk mode (touch tills): no pinch-zoom or text selection outside fields. */
+.kiosk {
+  touch-action: pan-x pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.kiosk input,
+.kiosk textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}

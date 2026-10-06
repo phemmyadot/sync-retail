@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { holdIdle } from '@/store/idle';
 import {
   maxRedeemablePoints,
   PAYMENT_LABEL,
@@ -42,6 +43,8 @@ export function CheckoutModal({ open, totalCents, breakdown, customer, onClose, 
   const [reference, setReference] = useState('');
   const [blocks, setBlocks] = useState(1);
   const [processing, setProcessing] = useState<null | 'card' | 'sale'>(null);
+  // The idle lock waits while a payment or the sale itself is in flight.
+  useEffect(() => (processing ? holdIdle() : undefined), [processing]);
   const [error, setError] = useState<string | null>(null);
 
   const summary = useMemo(() => summarizeTenders(totalCents, tenders), [totalCents, tenders]);

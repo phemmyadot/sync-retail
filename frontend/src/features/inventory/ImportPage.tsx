@@ -273,6 +273,7 @@ function Dropzone({ onFile }: { onFile: (f: File) => void }) {
   };
   return (
     <div
+      data-allow-drop
       onDragOver={(e) => {
         e.preventDefault();
         setOver(true);

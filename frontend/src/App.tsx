@@ -16,6 +16,7 @@ import { SalesHistoryPage } from '@/features/sales/SalesHistoryPage';
 import { ReportsPage } from '@/features/reports/ReportsPage';
 import { AdminPage } from '@/features/admin/AdminPage';
 import { AuditPage } from '@/features/admin/AuditPage';
+import { KioskRoot } from '@/features/kiosk/KioskRoot';
 
 /** Renders children when the user has the permission (or any of a list). */
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: ReactNode }) {
@@ -49,6 +50,7 @@ export function App() {
         )}
       </Routes>
       {token && <OverrideModal />}
+      <KioskRoot />
       <Toaster />
     </>
   );

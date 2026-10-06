@@ -99,5 +99,6 @@ pub fn forget_pairing(app: AppHandle) -> Result<(), String> {
         }
     }
     mode::clear(&app);
+    crate::kiosk::apply(&app); // back to a normal window for re-pairing
     Ok(())
 }

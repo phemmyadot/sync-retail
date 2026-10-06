@@ -1,6 +1,6 @@
 # Sync Retail — Full-Screen Kiosk Mode & Auto-Start
 
-**Implementation plan · v1 · 2026-10-05**
+**Implementation plan · v1 · 2026-10-05 — implemented 2026-10-06 (K1–K5; see §12)**
 
 The till PC boots straight into Sync Retail, full screen. Cashiers can't accidentally close it, shrink it or wander onto the desktop. A manager can unlock it for maintenance with their PIN.
 
@@ -230,3 +230,37 @@ Recommendation:
 4. **Exit gesture:** is the 3-second logo hold acceptable, or do you prefer only the Admin → System route?
 5. **Hardware:** are tills touchscreens? Do they have a second monitor for the customer display?
 6. **Truncated brief:** were there further sections after "Programmatic Full-Screen Enforcement on Boot"?
+
+---
+
+## 12. Implementation status (2026-10-06)
+
+K1–K5 are implemented. Idle logout was added at the same time and applies to every register, not only kiosk tills.
+
+| Area | What shipped | Where |
+|---|---|---|
+| Settings and engagement | `kiosk.json` per PC. Kiosk engages only after setup or pairing has reached the staff lock screen (`setupComplete`), so a Main Register is never locked down before an admin exists. Release builds only; `SR_KIOSK=0/1` overrides for one launch. | `src-tauri/src/kiosk.rs` |
+| Window | Created full screen without decorations (no windowed flash). ✕/Alt+F4 prevented, with a toast. A 1-second loop restores full screen after minimise or display changes. | `windows.rs`, `lib.rs`, `kiosk.rs` |
+| Unlock | Hold the **Sr** logo (or the lock screen's "Register … · locked" line) for 3 s, then enter a manager or admin PIN. `POST /api/kiosk/unlock` works **without a session** (rate-limited 5 per 10 min) and is logged as override `KIOSK_EXIT`. 10-minute maintenance window with a countdown banner, *Restore kiosk now* and *Exit app*. | `routes/kiosk.ts`, `features/kiosk/*` |
+| Offline exit | Store-wide 4-digit PIN, hashed with **Argon2id on the register** (the server only stores the hash). Registers fetch it when someone signs in and verify it locally (5 attempts per 10 min). Offline unlocks are queued and replayed to the audit log. | `kiosk.rs`, `KioskSettings.tsx`, `lib/kiosk.ts` |
+| Browser hardening | Capture-phase guard: F1/F3/F5/F6/F7/F10–F12, Ctrl+R/P/F/G/N/W/T/S/O/U/J/H/L, zoom keys, Ctrl+Shift+letter, Alt+←/→, the context menu, Ctrl+wheel and file drops are blocked (except on `[data-allow-drop]`, i.e. the import page). Touch: no pinch-zoom or text selection outside fields. App shortcuts F2/F4/F9 still work. | `KioskGuard.tsx`, `styles/index.css` |
+| Strict level | Always on top; `WH_KEYBOARD_LL` hook (Win, Alt+Tab, Alt/Ctrl+Esc, only while the till is in front); relaunch watchdog. | `kiosk_hook.rs` |
+| Autostart | `tauri-plugin-autostart` (HKCU Run), kept in sync with the setting. Never registered by dev builds or `SR_PROFILE` test instances. | `kiosk.rs` |
+| Single instance | `tauri-plugin-single-instance`: autostart, the watchdog or a second click focuses the running till (off for `SR_PROFILE` test instances). | `lib.rs` |
+| Customer display | Opens full screen on the configured monitor (auto = first non-primary) at start, when kiosk is on. | `windows.rs` |
+| **Idle logout** | Store setting **Lock idle registers after N minutes** (Admin → Store & loyalty; default 5, 0 = off). A 30-second "Still there?" warning, then the PIN lock screen. **The open sale (cart, customer, approvals) is kept**: the lock screen shows "Sale on hold: N items · total", and it is on the register after the next sign-in. Paused while a sale or payment is being submitted or a manager override is open. Works in the browser build too. | `features/kiosk/IdleLock.tsx`, `store/idle.ts` |
+| Deployment | `docs/KIOSK_DEPLOYMENT.md` + `scripts/windows/kiosk-setup.ps1` (Pro policy hardening for the till account, with `-Undo`). | |
+
+**Changes from the plan**
+- **Idle lock** is a store-wide setting instead of per-PC `kiosk.json`. Unattended registers are a security issue whether or not kiosk is on, and it also applies to browser registers.
+- **Watchdog** is a second copy of the app (`sync-retail.exe --kiosk-watchdog <pid> <data>`) instead of a Task Scheduler task. It needs no admin rights, and autostart covers sign-in. An intentional exit writes a `kiosk-clean-exit` marker so it doesn't relaunch.
+- **WebView2 accelerator keys:** Tauri 2.12 doesn't expose the setting, so the JS guard is the only layer (as planned for that case). DevTools are already off in release builds.
+- **Installer autostart checkbox** was not added: the app registers autostart itself, on by default.
+
+**Verification**
+- Desktop, on the real release build in an isolated profile: **25/25** checks. They cover: windowed during setup; full screen after it; WM_CLOSE ignored with a toast; minimise restored; F5/Ctrl+R/context menu/zoom blocked while F2 still works; the offline PIN stored only as an Argon2id hash and verified locally; the 3-second hold with a wrong PIN refused and the right one unlocking; maintenance windowed with the banner; close allowed while unlocked; relaunch created full screen; strict always-on-top plus watchdog; a Task Manager kill relaunched full screen; unlock from the lock screen then *Exit app* with no relaunch.
+- Web (Docker): **13/13** checks. They cover: unlock without a session; agent PIN refused; both attempts in the override log; offline-PIN permissions and format; event replay; default idle 5 min; the warning about 30 s before; "I'm here" keeps the session; locked after the idle minute; the held sale on the lock screen; the sale still there after another cashier signs in.
+- After a hard kill, the host stopped Postgres cleanly (`shutting down → stopped` in `host.log`).
+
+**Still to check by hand:** the strict keyboard hook (Win / Alt+Tab need a physical keyboard), autostart at Windows sign-in (disabled for test profiles), customer-display placement on a second monitor, touch gestures, and the policy script on a Windows Pro till account.
+

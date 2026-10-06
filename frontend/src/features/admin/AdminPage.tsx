@@ -11,6 +11,7 @@ import { Avatar, Badge, Button, Input, Label, PageHeader, Segmented } from '@/co
 import { Modal } from '@/components/ui/Modal';
 import { DevicesTab } from './DevicesTab';
 import { TaxManagement } from './TaxManagement';
+import { KioskSettings } from '@/features/kiosk/KioskSettings';
 import { useCan } from '@/hooks/useOverride';
 
 interface StaffUser {
@@ -25,7 +26,7 @@ interface StaffUser {
 
 const SWATCHES = ['#FFB547', '#8BE28B', '#6FC9F2', '#E7A6F0', '#F28C6B', '#D9D1BF'];
 
-type AdminTab = 'staff' | 'store' | 'tax' | 'registers' | 'system';
+type AdminTab = 'staff' | 'store' | 'tax' | 'registers' | 'kiosk' | 'system';
 
 export function AdminPage() {
   const can = useCan();
@@ -36,6 +37,7 @@ export function AdminPage() {
       { value: 'store', label: 'Store & loyalty', show: can('settings:write') },
       { value: 'tax', label: 'Tax', show: can('tax:manage') },
       { value: 'registers', label: 'Registers', show: IS_TAURI && can('devices:manage') },
+      { value: 'kiosk', label: 'Kiosk', show: IS_TAURI && can('devices:manage') },
       { value: 'system', label: 'System', show: can('users:manage') },
     ] as { value: AdminTab; label: string; show: boolean }[]
   ).filter((t) => t.show);
@@ -58,6 +60,8 @@ export function AdminPage() {
         <TaxManagement />
       ) : tab === 'registers' ? (
         <DevicesTab />
+      ) : tab === 'kiosk' ? (
+        <KioskSettings />
       ) : (
         <SystemTab />
       )}
@@ -248,6 +252,13 @@ function StoreTab() {
           onChange={(e) => setForm({ ...form, agentMaxDiscountBps: Math.round(Number(e.target.value) * 100) || 0 })}
         />
         <Input label="Receipt footer" value={form.receiptFooter} onChange={(e) => setForm({ ...form, receiptFooter: e.target.value })} />
+        <Input
+          label="Lock idle registers after (minutes)"
+          hint={form.idleLockMinutes ? 'Back to the PIN screen when nobody touches the register. The open sale is kept.' : 'Off — registers stay signed in until someone locks them.'}
+          inputMode="numeric"
+          value={String(form.idleLockMinutes)}
+          onChange={(e) => setForm({ ...form, idleLockMinutes: Math.min(240, Number(e.target.value.replace(/\D/g, '')) || 0) })}
+        />
       </section>
 
       <section className="space-y-4">

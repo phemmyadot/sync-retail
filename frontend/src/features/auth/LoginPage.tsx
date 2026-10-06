@@ -9,6 +9,11 @@ import { PinPad } from '@/components/ui/PinPad';
 import { Avatar, Button, Input } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { getTerminalId } from '@/lib/config';
+import { cartTotals, useCart } from '@/store/cart';
+import { useMoney } from '@/lib/format';
+
+
+import { useKioskHold } from '@/features/kiosk/useKioskHold';
 
 const STAFF_CACHE = 'sr-staff';
 
@@ -27,6 +32,9 @@ export function LoginPage() {
   const locked = useAuth((s) => s.locked);
   const { data: settings } = useSettings();
   const now = useClock();
+  const kioskHold = useKioskHold();
+  const heldLines = useCart((s) => s.lines);
+  const money = useMoney();
   const [mode, setMode] = useState<'pin' | 'password'>('pin');
   const [selected, setSelected] = useState<StaffTile | null>(null);
   const [errorKey, setErrorKey] = useState(0);
@@ -85,7 +93,7 @@ export function LoginPage() {
         <div className="pointer-events-none absolute -right-24 top-10 hidden h-[130%] w-72 rotate-[8deg] lg:block">
           <div className="paper tear-both h-full w-full opacity-[0.08]" />
         </div>
-        <div className="flex items-center gap-3 animate-rise">
+        <div className="flex select-none items-center gap-3 animate-rise" {...kioskHold}>
           <span className="h-2.5 w-2.5 rounded-full bg-amber shadow-glow animate-blink" />
           <span className="eyebrow">Register {getTerminalId()} · {locked ? 'locked' : 'signed out'}</span>
         </div>
@@ -176,6 +184,15 @@ export function LoginPage() {
           <p className="mt-6 min-h-5 text-center text-sm text-vermilion" role="alert">
             {error}
           </p>
+          {heldLines.length > 0 && (
+            <div className="mt-2 flex items-center gap-3 rounded-sm border border-amber/40 bg-ink-2 px-4 py-3 text-sm">
+              <Icon name="receipt" size={18} className="shrink-0 text-amber" />
+              <span className="text-dust">
+                <span className="text-bone">Sale on hold:</span> {heldLines.reduce((a, l) => a + l.quantity, 0)} item(s) ·{' '}
+                <span className="num text-bone">{money(cartTotals(heldLines).totalCents)}</span>. It’s waiting on the register after sign-in.
+              </span>
+            </div>
+          )}
         </div>
       </section>
     </div>
