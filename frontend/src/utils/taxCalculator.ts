@@ -3,7 +3,7 @@
  *
  * Deliberately has no maths of its own: it re-exports the shared engine that
  * the server also runs on every sale, so the totals a customer sees are
- * exactly the totals they're charged (docs/TAX_PLAN.md §2 T2).
+ * exactly the totals they're charged (docs/done/TAX_PLAN.md §2 T2).
  */
 import { priceCart, taxBreakdown, taxMarkers, type CartTotals, type TaxBreakdownLine, type TaxedLine } from '@sync-retail/shared';
 

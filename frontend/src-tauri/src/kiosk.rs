@@ -2,7 +2,7 @@
 //! or wander onto the desktop. A manager PIN unlocks a timed maintenance window.
 //!
 //! Settings are per PC, in `<data>/kiosk.json` beside `mode.json`, so they
-//! apply before any network or login. See docs/KIOSK_PLAN.md.
+//! apply before any network or login. See docs/done/KIOSK_PLAN.md.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
