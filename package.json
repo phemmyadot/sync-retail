@@ -1,7 +1,7 @@
 {
   "name": "sync-retail",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "workspaces": ["shared", "backend", "frontend"],
   "scripts": {
     "dev": "concurrently -n api,web -c yellow,cyan \"npm -w backend run dev\" \"npm -w frontend run dev\"",

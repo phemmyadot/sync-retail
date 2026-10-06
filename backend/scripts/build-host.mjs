@@ -42,6 +42,33 @@ const pkgDir = (name) => {
   return hit;
 };
 
+/**
+ * Removes the Authenticode signature from a PE file, without the Windows SDK:
+ * the certificate table (data directory 4) is appended at the end of the file,
+ * so truncate it and clear its directory entry and the header checksum.
+ */
+function stripAuthenticode(file) {
+  const buf = fs.readFileSync(file);
+  const pe = buf.readUInt32LE(0x3c);
+  if (buf.toString('latin1', pe, pe + 4) !== 'PE\0\0') throw new Error(`${file} is not a PE file`);
+  const opt = pe + 24;
+  const magic = buf.readUInt16LE(opt);
+  const dirs = opt + (magic === 0x20b ? 112 : magic === 0x10b ? 96 : NaN);
+  if (Number.isNaN(dirs)) throw new Error(`${file}: unknown optional header 0x${magic.toString(16)}`);
+  const entry = dirs + 4 * 8; // IMAGE_DIRECTORY_ENTRY_SECURITY
+  const offset = buf.readUInt32LE(entry);
+  const size = buf.readUInt32LE(entry + 4);
+  if (!size) return;
+  // Only the trailing case is safe to cut; anything else would corrupt the image.
+  if (offset + size !== buf.length && offset + size + ((8 - (size % 8)) % 8) !== buf.length) {
+    throw new Error(`${file}: certificate table is not at the end of the file`);
+  }
+  buf.writeUInt32LE(0, entry);
+  buf.writeUInt32LE(0, entry + 4);
+  buf.writeUInt32LE(0, opt + 64); // CheckSum (not required for user-mode executables)
+  fs.writeFileSync(file, buf.subarray(0, offset));
+}
+
 rm(out);
 fs.mkdirSync(out, { recursive: true });
 
@@ -77,6 +104,10 @@ fs.writeFileSync(
 execFileSync(process.execPath, ['--experimental-sea-config', seaConfig], { stdio: 'inherit' });
 const exe = path.join(out, 'sr-host.exe');
 fs.copyFileSync(process.execPath, exe);
+// node.exe is Authenticode-signed; injecting the blob would leave a *broken*
+// signature, which antivirus treats as more suspicious than none. Remove it
+// first (as Node's SEA docs advise). The release pipeline re-signs with our own.
+stripAuthenticode(exe);
 execFileSync(
   process.execPath,
   [require.resolve('postject/dist/cli.js', { paths: [backend] }), exe, 'NODE_SEA_BLOB', path.join(out, 'sea-prep.blob'), '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2', '--overwrite'],

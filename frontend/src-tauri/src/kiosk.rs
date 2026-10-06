@@ -42,7 +42,9 @@ pub struct KioskSettings {
 impl Default for KioskSettings {
     fn default() -> Self {
         Self {
-            enabled: true,
+            // Off until a manager turns it on in Admin → Kiosk (a normal
+            // window is the safer first experience on a new PC).
+            enabled: false,
             level: Level::Standard,
             autostart: true,
             customer_display_monitor: "auto".into(),

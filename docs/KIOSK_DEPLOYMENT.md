@@ -9,7 +9,7 @@ Sync Retail's kiosk mode stops **accidents**: closing the window, minimising it,
 
 ## 1. In Sync Retail
 
-Kiosk mode turns on by itself on every till once its first setup is finished (Main Register setup or pairing a register). Change it per PC in **Admin → Kiosk**:
+Kiosk mode is **off** on a new PC. Turn it on per till in **Admin → Kiosk** (it can only take effect once the PC's first setup, as Main Register or a paired register, is finished):
 
 | Setting | Recommended |
 |---|---|

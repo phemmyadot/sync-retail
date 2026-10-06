@@ -264,3 +264,4 @@ K1–K5 are implemented. Idle logout was added at the same time and applies to e
 
 **Still to check by hand:** the strict keyboard hook (Win / Alt+Tab need a physical keyboard), autostart at Windows sign-in (disabled for test profiles), customer-display placement on a second monitor, touch gestures, and the policy script on a Windows Pro till account.
 
+**Update (v1.1.0):** kiosk mode is now **off by default** on new PCs; a manager turns it on per till in Admin → Kiosk. Existing `kiosk.json` files keep their setting.
