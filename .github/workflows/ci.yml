@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm -w backend run db:generate
+
+      - name: Typecheck (shared, backend, frontend)
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm -w shared test
+
+      - name: Build API and web app
+        run: |
+          npm -w backend run build
+          npm -w frontend run build

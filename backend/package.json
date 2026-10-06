@@ -49,6 +49,7 @@
     "@types/ws": "^8.18.1",
     "postject": "^1.0.0-alpha.6",
     "prisma": "^6.16.0",
+    "resedit": "^2.0.3",
     "tsup": "^8.5.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"

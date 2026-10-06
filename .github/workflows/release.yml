@@ -1,0 +1,195 @@
+# Builds the Windows installer from a version tag and publishes it as a draft
+# GitHub Release. See docs/RELEASING.md.
+#
+# Code signing (SignPath) switches on automatically once the repository has
+# the SIGNPATH_API_TOKEN secret and the SIGNPATH_ORGANIZATION_ID variable.
+# Without them the release is built and published unsigned.
+#
+# Signing happens in two rounds, because the installer must contain signed
+# programs and also be signed itself:
+#   1. sync-retail.exe + sr-host.exe   (artifact configuration "binaries")
+#   2. the NSIS installer               (artifact configuration "installer")
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      SIGN: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      SIGNPATH_PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG || 'sync-retail' }}
+      SIGNPATH_POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+      TAURI: frontend/src-tauri
+      SIDECAR: frontend/src-tauri/binaries/sr-host-x86_64-pc-windows-msvc.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauri = (Get-Content "$env:TAURI/tauri.conf.json" -Raw | ConvertFrom-Json).version
+          if ($v -ne $tauri) { throw "package.json ($v) and tauri.conf.json ($tauri) versions differ" }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "Tag $env:GITHUB_REF_NAME does not match the app version v$v. Bump the version (docs/RELEASING.md) or fix the tag."
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Building Sync Retail $v (signing: $env:SIGN)"
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm -w backend run db:generate
+
+      - name: Build the Main Register host (sr-host.exe + resources)
+        run: npm -w backend run build:host
+
+      - name: Build the app (no installer yet)
+        run: npm -w frontend run tauri build -- --no-bundle
+
+      # ── Signing round 1: the programs inside the installer ──────────────
+      - name: Stage programs for signing
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/unsigned-binaries | Out-Null
+          Copy-Item "$env:TAURI/target/release/sync-retail.exe" dist/unsigned-binaries/sync-retail.exe
+          Copy-Item $env:SIDECAR dist/unsigned-binaries/sr-host.exe
+
+      - name: Upload programs for signing
+        if: env.SIGN == 'true'
+        id: unsigned-binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-binaries
+          path: dist/unsigned-binaries
+          if-no-files-found: error
+
+      - name: Sign programs (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.unsigned-binaries.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-binaries
+
+      - name: Put signed programs back
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          Copy-Item dist/signed-binaries/sync-retail.exe "$env:TAURI/target/release/sync-retail.exe" -Force
+          Copy-Item dist/signed-binaries/sr-host.exe $env:SIDECAR -Force
+          foreach ($f in @("$env:TAURI/target/release/sync-retail.exe", $env:SIDECAR)) {
+            $s = Get-AuthenticodeSignature $f
+            if ($s.Status -ne 'Valid') { throw "$f is not validly signed: $($s.Status) $($s.StatusMessage)" }
+            Write-Host "$f signed by $($s.SignerCertificate.Subject)"
+          }
+
+      # ── Installer ───────────────────────────────────────────────────────
+      - name: Build the installer
+        run: npm -w frontend run tauri bundle -- --bundles nsis
+
+      - name: Collect installer
+        id: installer
+        shell: pwsh
+        run: |
+          $src = Get-ChildItem "$env:TAURI/target/release/bundle/nsis/*_${{ steps.version.outputs.version }}_x64-setup.exe" | Select-Object -First 1
+          if (-not $src) { throw 'Installer not found' }
+          New-Item -ItemType Directory -Force dist/release, dist/unsigned-installer | Out-Null
+          # A fixed name for the SignPath artifact configuration; renamed for the release below.
+          Copy-Item $src.FullName dist/unsigned-installer/SyncRetail-setup.exe
+          "name=SyncRetail-${{ steps.version.outputs.version }}-x64-setup.exe" >> $env:GITHUB_OUTPUT
+
+      # ── Signing round 2: the installer ──────────────────────────────────
+      - name: Upload installer for signing
+        if: env.SIGN == 'true'
+        id: unsigned-installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist/unsigned-installer
+          if-no-files-found: error
+
+      - name: Sign installer (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-installer
+
+      - name: Finalise files
+        shell: pwsh
+        run: |
+          $from = if ($env:SIGN -eq 'true') { 'dist/signed-installer' } else { 'dist/unsigned-installer' }
+          $out = "dist/release/${{ steps.installer.outputs.name }}"
+          Copy-Item "$from/SyncRetail-setup.exe" $out -Force
+          if ($env:SIGN -eq 'true') {
+            $s = Get-AuthenticodeSignature $out
+            if ($s.Status -ne 'Valid') { throw "Installer is not validly signed: $($s.Status)" }
+          }
+          Push-Location dist/release
+          Get-ChildItem *.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+          Pop-Location
+
+      - name: Keep build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-retail-${{ steps.version.outputs.version }}-windows
+          path: dist/release
+          if-no-files-found: error
+
+      - name: Draft GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          name: Sync Retail ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: dist/release/*
+          body: |
+            **Windows installer:** `${{ steps.installer.outputs.name }}` (check it against `SHA256SUMS.txt`).
+
+            ${{ env.SIGN == 'true' && 'Signed via SignPath (certificate by SignPath Foundation).' || 'This build is **not code-signed**: Windows SmartScreen will warn. Click **More info → Run anyway** to install.' }}
+
+            Installing needs administrator rights (the app installs for all users and adds a firewall rule so registers on the store network can connect). Existing data is kept when installing over an older version.

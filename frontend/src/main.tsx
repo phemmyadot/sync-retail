@@ -7,6 +7,14 @@ import { IS_TAURI } from '@/lib/config';
 import { HostGate } from '@/components/HostGate';
 import { SetupGate } from '@/features/setup/SetupGate';
 import { App } from './App';
+// Fonts ship with the app (no Google Fonts request): works offline, and nothing
+// is sent to third parties when a register starts.
+import '@fontsource-variable/bricolage-grotesque/opsz.css';
+import '@fontsource/instrument-serif/400.css';
+import '@fontsource/instrument-serif/400-italic.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/700.css';
 import './styles/index.css';
 
 const queryClient = new QueryClient({

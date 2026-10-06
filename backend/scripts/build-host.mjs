@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import * as ResEdit from 'resedit';
 
 const require = createRequire(import.meta.url);
 const backend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,6 +70,40 @@ function stripAuthenticode(file) {
   fs.writeFileSync(file, buf.subarray(0, offset));
 }
 
+/** Replaces node.exe's version details and icon with Sync Retail's (the SEA blob resource is kept). */
+function brandExecutable(file) {
+  const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  const [major, minor, patch] = version.split(/[.-]/).map((n) => Number(n) || 0);
+  const pe = ResEdit.NtExecutable.from(fs.readFileSync(file), { ignoreCert: true });
+  const res = ResEdit.NtExecutableResource.from(pe);
+
+  const [vi] = ResEdit.Resource.VersionInfo.fromEntries(res.entries);
+  if (!vi) throw new Error(`${file}: no version resource`);
+  for (const lang of vi.getAllLanguagesForStringValues()) {
+    vi.setStringValues(lang, {
+      ProductName: 'Sync Retail',
+      FileDescription: 'Sync Retail Main Register host',
+      CompanyName: 'Sync Retail',
+      InternalName: 'sr-host',
+      OriginalFilename: 'sr-host.exe',
+      LegalCopyright: 'Sync Retail © Babafemi Adojutelegan (AGPL-3.0). Includes Node.js © OpenJS Foundation and contributors (MIT).',
+      FileVersion: version,
+      ProductVersion: version,
+    });
+  }
+  vi.setFileVersion(major, minor, patch, 0);
+  vi.setProductVersion(major, minor, patch, 0);
+  vi.outputToResourceEntries(res.entries);
+
+  const [group] = ResEdit.Resource.IconGroupEntry.fromEntries(res.entries);
+  if (group) {
+    const ico = ResEdit.Data.IconFile.from(fs.readFileSync(path.join(tauri, 'icons', 'icon.ico')));
+    ResEdit.Resource.IconGroupEntry.replaceIconsForResource(res.entries, group.id, group.lang, ico.icons.map((i) => i.data));
+  }
+  res.outputResource(pe);
+  fs.writeFileSync(file, Buffer.from(pe.generate()));
+}
+
 rm(out);
 fs.mkdirSync(out, { recursive: true });
 
@@ -113,6 +148,10 @@ execFileSync(
   [require.resolve('postject/dist/cli.js', { paths: [backend] }), exe, 'NODE_SEA_BLOB', path.join(out, 'sea-prep.blob'), '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2', '--overwrite'],
   { stdio: 'inherit' },
 );
+// Identify it as ours (Task Manager, antivirus, code signing review), keeping
+// the Node.js credit its MIT licence asks for. Done after postject: its PE
+// parser (LIEF) mis-reads relocations in a file resedit has rewritten.
+brandExecutable(exe);
 fs.mkdirSync(binOut, { recursive: true });
 fs.copyFileSync(exe, path.join(binOut, `sr-host-${TRIPLE}.exe`));
 

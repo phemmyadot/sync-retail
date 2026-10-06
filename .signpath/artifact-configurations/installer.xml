@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "installer" (signing round 2 in .github/workflows/release.yml).
+  The GitHub artifact is a zip with the NSIS installer under a fixed name; the
+  workflow renames it to SyncRetail-<version>-x64-setup.exe after signing.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="SyncRetail-setup.exe" product-name="Sync Retail">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

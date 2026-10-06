@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "binaries" (signing round 1 in .github/workflows/release.yml).
+  The GitHub artifact is a zip with the two programs that go inside the installer.
+  Paste this into the SignPath project as the artifact configuration with slug "binaries".
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="sync-retail.exe" product-name="Sync Retail">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="sr-host.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

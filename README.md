@@ -269,6 +269,22 @@ Bundled third-party components keep their own licences (PostgreSQL License, MIT,
 
 **Commercial licensing:** if the AGPL's terms don't work for your business (for example, you want to offer a modified hosted version without publishing your changes), a separate commercial licence is available from the maintainer. Open an issue or contact [@phemmyadot](https://github.com/phemmyadot) on GitHub.
 
+## Code signing policy
+
+Windows releases are built from this repository by GitHub Actions ([`release.yml`](.github/workflows/release.yml)) and published on the [Releases](https://github.com/phemmyadot/sync-retail/releases) page with SHA-256 checksums. See [`docs/RELEASING.md`](docs/RELEASING.md).
+
+Sync Retail is applying for free code signing from [SignPath Foundation](https://signpath.org). Once approved, releases will be signed with: *Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).* Until then, installers are **unsigned**, and Windows SmartScreen shows a warning.
+
+**Team roles**
+- Committers and reviewers: [@phemmyadot](https://github.com/phemmyadot)
+- Approvers (every signing request is approved manually): [@phemmyadot](https://github.com/phemmyadot)
+
+**Privacy:** Sync Retail does not send telemetry or usage data, and does not contact any third-party service. It only talks to:
+- the store's own server (your Docker deployment, or the desktop **Main Register**)
+- the registers and customer displays the store pairs with it on its own network (found by local network discovery)
+
+Fonts and all other assets ship with the app. Any future feature that contacts an outside service (for example backups to the store's own Google Drive, or update checks) will be off until the store turns it on, and will be documented here.
+
 ## Contributing
 
 Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) first: pull requests need a one-line agreement to the contributor licence terms, which keep the project able to offer the commercial licence above.
