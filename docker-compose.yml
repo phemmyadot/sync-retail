@@ -35,7 +35,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080,http://tauri.localhost,tauri://localhost}
       SESSION_TTL: ${SESSION_TTL:-12h}
       OVERRIDE_TTL_SECONDS: ${OVERRIDE_TTL_SECONDS:-300}
-      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
       # Fresh install without demo data: allow the owner setup wizard through nginx (not just localhost).
       SETUP_ALLOW_REMOTE: ${SETUP_ALLOW_REMOTE:-false}
     ports:

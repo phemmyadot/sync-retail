@@ -44,7 +44,9 @@ cp .env.example .env        # then set POSTGRES_PASSWORD and JWT_SECRET
 docker compose up -d --build
 ```
 
-Open **http://localhost:8080** and sign in with the demo logins below.
+Open **http://localhost:8080**. The first visit runs the setup wizard (store name, currency, owner account) — do it straight away, since setup is open until the first account exists.
+
+**Just exploring?** Set `SEED_DEMO_DATA=true` in `.env` *before the first start* to get a demo store with the logins below. Those passwords and PINs are public, so never use demo data for a real store.
 
 | Service | Container | Host port | What it does |
 |---|---|---|---|
@@ -65,7 +67,7 @@ docker compose down -v                               # stop and DELETE the datab
 
 **Hybrid dev:** run only the database in Docker (`docker compose up -d db`) and point `backend/.env` at `postgresql://postgres:<POSTGRES_PASSWORD>@localhost:5433/sync_retail?schema=public`. Then use `npm run dev` for hot reload on :5173.
 
-For production, set `SEED_DEMO_DATA=false` and put TLS in front of `web` (or your own reverse proxy).
+For production, keep `SEED_DEMO_DATA=false` and put TLS in front of `web` (or your own reverse proxy).
 
 ## Quick start (local, without Docker)
 
@@ -97,7 +99,7 @@ Need a throwaway database? `docker run -d --name pos-pg -e POSTGRES_PASSWORD=pos
 | Sales Agent | `agent@syncretail.dev`    | `agent1234`   | 3333 |
 | Sales Agent | `jordan@syncretail.dev`   | `agent1234`   | 4444 |
 
-To see the override workflow: sign in as **Sam (3333)**, ring up a few items and press the trash icon. The modal accepts **2222** or **1111**.
+To see the override workflow: sign in as **Sam (3333)**, ring up a few items and press the trash icon. Choose who is approving (**Morgan Lee** or **Avery Admin**), then enter their PIN (**2222** or **1111**).
 
 ---
 
@@ -254,3 +256,20 @@ WS   /ws?terminal=T1[&token=…]
 - **Card payments:** `CheckoutModal.addTender` has a clearly marked stub. Replace it with your terminal SDK (Stripe Terminal, Adyen, Square…) and store the authorisation reference.
 - **Scaling the API horizontally:** move the PIN rate limiter (`lib/rateLimit.ts`) and the display relay (`ws.ts`) to Redis.
 - **Printing:** receipts use a print stylesheet (`window.print()`). For ESC/POS thermal printers, add a Tauri command that sends raw bytes.
+
+---
+
+## License
+
+Sync Retail is free software, licensed under the **GNU Affero General Public License v3.0 only** ([`LICENSE`](LICENSE), SPDX `AGPL-3.0-only`).
+
+In short: you may use, study, change and share it, including commercially. If you distribute a modified version, **or run one for other people over a network** (for example as a hosted POS), you must make your modified source code available to them under the same licence.
+
+Bundled third-party components keep their own licences (PostgreSQL License, MIT, Apache-2.0, and the DejaVu font licence, among others).
+
+**Commercial licensing:** if the AGPL's terms don't work for your business (for example, you want to offer a modified hosted version without publishing your changes), a separate commercial licence is available from the maintainer. Open an issue or contact [@phemmyadot](https://github.com/phemmyadot) on GitHub.
+
+## Contributing
+
+Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) first: pull requests need a one-line agreement to the contributor licence terms, which keep the project able to offer the commercial licence above.
+

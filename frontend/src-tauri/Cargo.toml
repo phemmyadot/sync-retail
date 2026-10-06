@@ -2,6 +2,7 @@
 name = "sync-retail"
 version = "1.1.0"
 description = "Sync Retail — cloud-native point of sale"
+license = "AGPL-3.0-only"
 edition = "2021"
 
 [lib]

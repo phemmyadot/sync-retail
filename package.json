@@ -2,6 +2,7 @@
   "name": "sync-retail",
   "private": true,
   "version": "1.1.0",
+  "license": "AGPL-3.0-only",
   "workspaces": ["shared", "backend", "frontend"],
   "scripts": {
     "dev": "concurrently -n api,web -c yellow,cyan \"npm -w backend run dev\" \"npm -w frontend run dev\"",
