@@ -20,12 +20,16 @@ const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-3xl', xl: 'max-w-5xl
 
 export function Modal({ open, onClose, title, eyebrow, children, footer, width = 'md', tone = 'ink', locked }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
+  // Parents pass inline handlers; keep the latest without re-running the
+  // focus effect on every parent render (that stole focus mid-typing).
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !locked) onClose();
+      if (e.key === 'Escape' && !locked) closeRef.current();
       // Basic focus trap
       if (e.key === 'Tab' && panel.current) {
         const f = panel.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -42,12 +46,17 @@ export function Modal({ open, onClose, title, eyebrow, children, footer, width =
       }
     };
     window.addEventListener('keydown', onKey);
-    requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>('[autofocus], input, button')?.focus());
+    requestAnimationFrame(() => {
+      const p = panel.current;
+      // Respect a field that already took focus (React autoFocus, or the user typing).
+      if (!p || p.contains(document.activeElement)) return;
+      (p.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea') ?? p.querySelector<HTMLElement>('button'))?.focus();
+    });
     return () => {
       window.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, locked, onClose]);
+  }, [open, locked]);
 
   if (!open) return null;
   return createPortal(

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
-// The app's own shortcuts (F2 search, F4 customer, F9 pay) stay available.
-const BLOCKED_F_KEYS = new Set(['F1', 'F3', 'F5', 'F6', 'F7', 'F10', 'F11', 'F12']);
+// The app's own shortcuts (F2 search, F4 customer, F6 hold, F7 held sales, F9 pay) stay available.
+const BLOCKED_F_KEYS = new Set(['F1', 'F3', 'F5', 'F10', 'F11', 'F12']);
 // Ctrl/⌘ + key: reload, print, find, new/close window, save, open, view source, downloads, history, zoom.
 const BLOCKED_CTRL_KEYS = new Set(['r', 'p', 'f', 'g', 'n', 'w', 't', 's', 'o', 'u', 'j', 'h', 'l', '+', '-', '=', '0']);
 

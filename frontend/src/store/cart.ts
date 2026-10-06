@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { priceCart, type CustomerDTO, type LineDiscount, type ProductDTO } from '@sync-retail/shared';
+import { priceCart, type CustomerDTO, type LineDiscount, type ParkedLine, type ProductDTO } from '@sync-retail/shared';
 
 export interface CartLine {
   key: string;
@@ -25,6 +25,8 @@ interface CartState {
   setDiscount: (key: string, d: LineDiscount | null) => void;
   setCustomer: (c: CustomerDTO | null) => void;
   addApproval: (token: string) => void;
+  /** Replaces the cart with a resumed held sale. */
+  load: (lines: ParkedLine[], customer: CustomerDTO | null, approvals: string[]) => void;
   clear: () => void;
 }
 
@@ -59,6 +61,22 @@ export const useCart = create<CartState>()(
       setDiscount: (key, d) => set((s) => ({ lines: s.lines.map((l) => (l.key === key ? { ...l, discount: d } : l)) })),
       setCustomer: (customer) => set({ customer }),
       addApproval: (token) => set((s) => ({ approvals: [...s.approvals, token] })),
+      load: (lines, customer, approvals) =>
+        set({
+          lines: lines.map((l, i) => ({
+            key: `${l.productId}:${Date.now().toString(36)}${i}`,
+            productId: l.productId,
+            sku: l.sku,
+            name: l.name,
+            unitPriceCents: l.unitPriceCents,
+            taxRateBps: l.taxRateBps,
+            quantity: l.quantity,
+            discount: l.discount,
+          })),
+          customer,
+          approvals,
+          lastAddedKey: null,
+        }),
       clear: () => set({ lines: [], customer: null, approvals: [], lastAddedKey: null }),
     }),
     { name: 'sr-cart' }, // survives an accidental reload mid-sale

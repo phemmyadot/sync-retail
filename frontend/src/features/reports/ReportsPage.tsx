@@ -207,6 +207,28 @@ export function ReportsPage() {
             )}
           </section>
 
+          <section className="border-b border-line px-6 py-8 lg:px-10">
+            <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="display text-3xl">Held sales</h2>
+              <span className="eyebrow">Started in this period</span>
+            </div>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+              {[
+                ['Held', String(r.held.held)],
+                ['Resumed', String(r.held.resumed)],
+                ['Discarded', String(r.held.discarded)],
+                ['Expired', String(r.held.expired)],
+                ['Still held', String(r.held.open)],
+                ['Abandoned value', money(r.held.abandonedCents)],
+              ].map(([label, value]) => (
+                <div key={label} className="bg-ink px-4 py-3">
+                  <p className="eyebrow">{label}</p>
+                  <p className={clsx('num mt-1 text-xl', label === 'Abandoned value' && r.held.abandonedCents ? 'text-vermilion' : 'text-bone')}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
           <section className="px-6 py-8 lg:px-10">
             <h2 className="display mb-6 text-3xl">Staff performance</h2>
             <div className="overflow-x-auto">

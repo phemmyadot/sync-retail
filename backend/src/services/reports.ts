@@ -45,7 +45,7 @@ const n = (v: unknown) => Number(v ?? 0);
 export async function buildReport({ from, to, granularity }: ReportRange): Promise<ReportSummary> {
   const counted = { createdAt: { gte: from, lte: to }, status: { not: 'VOIDED' as const } };
 
-  const [agg, itemAgg, series, top, categories, payments, workers, voids, overrides, taxes, margin] = await Promise.all([
+  const [agg, itemAgg, series, top, categories, payments, workers, voids, overrides, taxes, margin, held] = await Promise.all([
     prisma.sale.aggregate({
       where: counted,
       _sum: { totalCents: true, taxCents: true, discountCents: true, refundedCents: true },
@@ -100,7 +100,9 @@ export async function buildReport({ from, to, granularity }: ReportRange): Promi
       SELECT SUM((i."totalCents" - i."taxCents") - i."costCents" * i.quantity) AS margin
       FROM "SaleItem" i JOIN "Sale" s ON s.id = i."saleId"
       WHERE s."createdAt" BETWEEN ${from} AND ${to} AND s.status <> 'VOIDED'`,
+    prisma.parkedSale.groupBy({ by: ['status'], where: { createdAt: { gte: from, lte: to } }, _count: { _all: true }, _sum: { totalCents: true } }),
   ]);
+  const heldBy = (s: string) => held.find((h) => h.status === s);
 
   const userIds = [...new Set([...workers.map((w) => w.cashierId), ...voids.map((v) => v.cashierId)])];
   const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } });
@@ -127,6 +129,14 @@ export async function buildReport({ from, to, granularity }: ReportRange): Promi
     topProducts: top.map((r) => ({ productId: r.productId, name: r.name, sku: r.sku, quantity: n(r.qty), revenueCents: n(r.revenue) })),
     categories: categories.map((r) => ({ name: r.name ?? 'Uncategorised', revenueCents: n(r.revenue), quantity: n(r.qty) })),
     taxes: taxes.map((t) => ({ name: t.name ?? `Tax ${formatRate(t.rate)}`, rateBps: t.rate, taxableCents: n(t.taxable), taxCents: n(t.tax) })),
+    held: {
+      held: held.reduce((a, h) => a + h._count._all, 0),
+      open: heldBy('PARKED')?._count._all ?? 0,
+      resumed: heldBy('RESUMED')?._count._all ?? 0,
+      discarded: heldBy('DISCARDED')?._count._all ?? 0,
+      expired: heldBy('EXPIRED')?._count._all ?? 0,
+      abandonedCents: (heldBy('DISCARDED')?._sum.totalCents ?? 0) + (heldBy('EXPIRED')?._sum.totalCents ?? 0),
+    },
     payments: payments
       .map((p) => ({ method: p.method as PaymentMethod, amountCents: p._sum.amountCents ?? 0, count: p._count._all }))
       .sort((a, b) => b.amountCents - a.amountCents),
@@ -184,6 +194,9 @@ export function reportToCsv(r: ReportSummary, currency: string): string {
     [],
     ['Tax class', 'Rate', `Taxable ${c}`, `Tax ${c}`],
     ...r.taxes.map((t) => [t.name, formatRate(t.rateBps), money(t.taxableCents), money(t.taxCents)]),
+    [],
+    ['Held sales', 'Resumed', 'Discarded', 'Expired', 'Still held', `Abandoned value ${c}`],
+    [r.held.held, r.held.resumed, r.held.discarded, r.held.expired, r.held.open, money(r.held.abandonedCents)],
     [],
     ['Payment method', 'Count', `Amount ${c}`],
     ...r.payments.map((p) => [p.method, p.count, money(p.amountCents)]),

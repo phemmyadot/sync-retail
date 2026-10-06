@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { CategoryDTO, CreateSaleInput, CustomerDTO, ProductDTO, StoreSettings, TaxClassDTO } from '@sync-retail/shared';
+import type { CategoryDTO, CreateSaleInput, CustomerDTO, HoldSaleInput, ParkedLine, ProductDTO, StoreSettings, TaxClassDTO } from '@sync-retail/shared';
 
 export interface OutboxSale {
   clientId: string;
@@ -11,6 +11,24 @@ export interface OutboxSale {
   error?: string;
   createdAt: string;
   totalCents: number;
+}
+
+/** A sale held while the Main Register was unreachable; shared on reconnect. */
+export interface LocalParkedSale {
+  clientId: string;
+  input: HoldSaleInput;
+  /** Session of the cashier who held it (attribution on upload). */
+  token: string | null;
+  /** For the list and for resuming without the server. */
+  lines: ParkedLine[];
+  customer: CustomerDTO | null;
+  approvals: string[];
+  cashierName: string;
+  totalCents: number;
+  itemCount: number;
+  createdAt: string;
+  /** Upload refused (e.g. a product was deleted meanwhile). Still resumable here. */
+  error?: string;
 }
 
 interface Meta {
@@ -25,6 +43,7 @@ class LocalDB extends Dexie {
   taxClasses!: Table<TaxClassDTO, string>;
   customers!: Table<CustomerDTO, string>;
   outbox!: Table<OutboxSale, string>;
+  parkedLocal!: Table<LocalParkedSale, string>;
   meta!: Table<Meta, string>;
 
   constructor() {
@@ -38,6 +57,8 @@ class LocalDB extends Dexie {
     });
     // v2: tax classes (rates resolve from the class, so a rate change syncs without touching products).
     this.version(2).stores({ taxClasses: 'id, isDefault' });
+    // v3: sales held while offline.
+    this.version(3).stores({ parkedLocal: 'clientId, createdAt' });
   }
 }
 

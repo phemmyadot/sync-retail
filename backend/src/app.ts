@@ -16,6 +16,7 @@ import { importRouter } from './routes/imports';
 import { auditRouter, publicSettings, settingsRouter, syncRouter } from './routes/misc';
 import { setupRouter } from './routes/setup';
 import { kioskRouter } from './routes/kiosk';
+import { parkedSalesRouter } from './routes/parkedSales';
 import { diagnosticsRouter } from './routes/diagnostics';
 import { taxRouter } from './routes/tax';
 import { requireDevice } from './network/deviceAuth';
@@ -53,6 +54,7 @@ export function createApp() {
   api.use('/tax-classes', taxRouter);
   api.use('/customers', customersRouter);
   api.use('/sales', salesRouter);
+  api.use('/parked-sales', parkedSalesRouter);
   api.use('/overrides', overridesRouter);
   api.use('/reports', requirePermission('reports:read'), reportsRouter);
   api.use('/import', requirePermission('inventory:import'), importRouter);

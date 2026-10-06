@@ -92,6 +92,8 @@ export function reportToPdf(r: ReportSummary, settings: StoreSettings): Promise<
     r.categories.map((c) => [c.name, String(c.quantity), fmt(c.revenueCents)]));
   table('Tax by class', ['Tax class', 'Rate', 'Taxable', 'Tax'], [0.4, 0.15, 0.25, 0.2],
     r.taxes.map((t) => [t.name, formatRate(t.rateBps), fmt(t.taxableCents), fmt(t.taxCents)]));
+  table('Held sales', ['Held', 'Resumed', 'Discarded', 'Expired', 'Still held', 'Abandoned'], [0.15, 0.15, 0.15, 0.15, 0.15, 0.25],
+    [[String(r.held.held), String(r.held.resumed), String(r.held.discarded), String(r.held.expired), String(r.held.open), fmt(r.held.abandonedCents)]]);
   table('Payment methods', ['Method', 'Count', 'Amount'], [0.6, 0.15, 0.25],
     r.payments.map((p) => [PAYMENT_LABEL[p.method], String(p.count), fmt(p.amountCents)]));
   table('Staff performance', ['Name', 'Sales', 'Net', 'Avg', 'Voids', 'Overr.'], [0.3, 0.1, 0.2, 0.2, 0.1, 0.1],

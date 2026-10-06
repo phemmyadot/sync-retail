@@ -45,6 +45,8 @@ settingsRouter.put('/', requirePermission('settings:write'), async (req, res) =>
         agentMaxDiscountBps: z.number().int().min(0).max(10_000),
         receiptFooter: z.string().max(300),
         idleLockMinutes: z.number().int().min(0).max(240),
+        parkedSaleExpiryHours: z.number().int().min(0).max(720),
+        parkedRemindMinutes: z.number().int().min(1).max(1440),
         loyalty: z.object({
           pointsPerDollar: z.number().int().min(0).max(100),
           redeemBlockPoints: z.number().int().min(1),

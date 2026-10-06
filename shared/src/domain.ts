@@ -52,6 +52,7 @@ const ADMIN_ONLY: readonly Role[] = ['ADMIN'];
 
 export const PERMISSIONS = {
   'sales:create': ALL,
+  'sales:park': ALL,
   'sales:read': ALL,
   'sales:void': MGMT,
   'sales:return': MGMT,
@@ -104,6 +105,10 @@ export interface StoreSettings {
   promoBanners: { title: string; subtitle: string }[];
   /** Registers return to the PIN screen after this many idle minutes (0 = never). The open sale is kept. */
   idleLockMinutes: number;
+  /** Held sales expire after this many hours (0 = never). */
+  parkedSaleExpiryHours: number;
+  /** Held sales older than this are highlighted in the list. */
+  parkedRemindMinutes: number;
 }
 
 export interface LoyaltyConfig {
@@ -123,6 +128,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   agentMaxDiscountBps: 1000,
   receiptFooter: 'Thank you — come back soon.',
   idleLockMinutes: 5,
+  parkedSaleExpiryHours: 24,
+  parkedRemindMinutes: 30,
   promoBanners: [
     { title: 'Members earn on every purchase', subtitle: 'Earn {earnRate} points for every {symbol}1 you spend.' },
     { title: '{redeemPoints} points = {redeemValue} off', subtitle: 'Redeem your rewards at any register.' },

@@ -259,6 +259,21 @@ function StoreTab() {
           value={String(form.idleLockMinutes)}
           onChange={(e) => setForm({ ...form, idleLockMinutes: Math.min(240, Number(e.target.value.replace(/\D/g, '')) || 0) })}
         />
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Held sales expire after (hours)"
+            hint={form.parkedSaleExpiryHours ? undefined : 'Never'}
+            inputMode="numeric"
+            value={String(form.parkedSaleExpiryHours)}
+            onChange={(e) => setForm({ ...form, parkedSaleExpiryHours: Math.min(720, Number(e.target.value.replace(/\D/g, '')) || 0) })}
+          />
+          <Input
+            label="Highlight held sales after (min)"
+            inputMode="numeric"
+            value={String(form.parkedRemindMinutes)}
+            onChange={(e) => setForm({ ...form, parkedRemindMinutes: Math.min(1440, Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1)) })}
+          />
+        </div>
       </section>
 
       <section className="space-y-4">

@@ -7,6 +7,7 @@ import {
   summarizeTenders,
   type CreateSaleInput,
   type LineDiscount,
+  type ParkedChange,
   type ProductDTO,
   type SaleDTO,
   type SaleTenderInput,
@@ -19,7 +20,9 @@ import { useCart, type CartLine } from '@/store/cart';
 import { useAuth } from '@/store/auth';
 import { OverrideCancelled } from '@/store/override';
 import { toast } from '@/store/toast';
-import { api, ApiError, NetworkError } from '@/lib/api';
+import { api, ApiError, errorMessage, NetworkError } from '@/lib/api';
+import { discardLocal, discardShared, holdCart, resumeLocal, resumeShared } from '@/lib/parked';
+import { useParkedSales } from '@/hooks/useParkedSales';
 import { localDb } from '@/lib/db';
 import { DisplayPublisher } from '@/lib/display';
 import { nextReceiptNo, openCustomerDisplay } from '@/lib/platform';
@@ -36,6 +39,9 @@ import { DiscountModal } from './DiscountModal';
 import { CustomerPicker } from './CustomerPicker';
 import { CheckoutModal } from './CheckoutModal';
 import { Receipt, saleToReceipt, type ReceiptData } from './Receipt';
+import { HoldSaleDialog } from './HoldSaleDialog';
+import { ParkedSalesDrawer, type HeldItem } from './ParkedSalesDrawer';
+import { ResumeChanges } from './ResumeChanges';
 
 export function PosTerminal() {
   const { products, categories, ready, lookup, taxFor } = useCatalog();
@@ -54,6 +60,11 @@ export function PosTerminal() {
   const [pickingCustomer, setPickingCustomer] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [holding, setHolding] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [swapFor, setSwapFor] = useState<HeldItem | null>(null);
+  const [changes, setChanges] = useState<ParkedChange[]>([]);
+  const parked = useParkedSales(heldOpen);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Each line is taxed at its product's *current* class rate (synced classes).
@@ -181,6 +192,66 @@ export function PosTerminal() {
     setDiscountLine(null);
   };
 
+  // ── Held sales ───────────────────────────────────────────────────────────
+  const hold = async (reference: string) => {
+    try {
+      const r = await holdCart(reference);
+      setHolding(false);
+      setChanges([]);
+      if (r.offline) toast.warn('Held on this register', 'Offline — other registers will see it when the connection returns.');
+      else toast.success('Sale held', `${reference.trim() || 'No note'} · ${money(totals.totalCents)}`);
+    } catch (err) {
+      toast.error('Couldn’t hold the sale', errorMessage(err));
+    }
+  };
+
+  const heldName = (item: HeldItem) => (item.kind === 'shared' ? item.sale.reference : item.row.input.reference) || 'Held sale';
+
+  const doResume = async (item: HeldItem) => {
+    try {
+      const r = item.kind === 'shared' ? await resumeShared(item.sale.id) : await resumeLocal(item.row.clientId);
+      setChanges(r.changes);
+      setHeldOpen(false);
+      setSwapFor(null);
+      setReceipt(null);
+      toast.success('Sale resumed', heldName(item));
+    } catch (err) {
+      setSwapFor(null);
+      if (err instanceof ApiError && err.code === 'PARKED_CLOSED') {
+        toast.warn('Someone got there first', err.message);
+        window.dispatchEvent(new CustomEvent('sr:parked'));
+      } else toast.error('Couldn’t resume the sale', errorMessage(err));
+    }
+  };
+  // Never merge carts: an open sale must be held first (one tap).
+  const resume = async (item: HeldItem) => {
+    if (cart.lines.length) setSwapFor(item);
+    else await doResume(item);
+  };
+  const swapAndResume = async () => {
+    if (!swapFor) return;
+    try {
+      await holdCart(`Swapped for ${heldName(swapFor)}`);
+    } catch (err) {
+      toast.error('Couldn’t hold the current sale', errorMessage(err));
+      return;
+    }
+    await doResume(swapFor);
+  };
+
+  const discard = async (item: HeldItem, reason: string) => {
+    const total = item.kind === 'shared' ? item.sale.totalCents : item.row.totalCents;
+    try {
+      const token = await authorize({ action: 'CLEAR_CART', detail: `Discard held sale “${heldName(item)}” (${money(total)})`, context: { reason } });
+      if (item.kind === 'shared') await discardShared(item.sale.id, reason, token);
+      else await discardLocal(item.row.clientId);
+      toast.info('Held sale discarded', heldName(item));
+    } catch (err) {
+      if (err instanceof OverrideCancelled) return;
+      toast.error('Couldn’t discard', errorMessage(err));
+    }
+  };
+
   // ── Completing the sale ──────────────────────────────────────────────────
   const complete = async (tenders: SaleTenderInput[]) => {
     const payload: CreateSaleInput = {
@@ -271,11 +342,17 @@ export function PosTerminal() {
       } else if (e.key === 'F9' && cart.lines.length) {
         e.preventDefault();
         setCheckingOut(true);
+      } else if (e.key === 'F6' && cart.lines.length && !checkingOut) {
+        e.preventDefault();
+        setHolding(true);
+      } else if (e.key === 'F7' && !checkingOut) {
+        e.preventDefault();
+        setHeldOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cart.lines.length]);
+  }, [cart.lines.length, checkingOut]);
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)] lg:grid-rows-1">
@@ -346,6 +423,7 @@ export function PosTerminal() {
 
       {/* Receipt side */}
       <div className="flex max-h-[52vh] min-h-0 min-w-0 flex-col border-t border-line bg-ink-2/60 p-4 lg:max-h-none lg:border-l lg:border-t-0 lg:p-5">
+        <ResumeChanges changes={cart.lines.length ? changes : []} onDismiss={() => setChanges([])} />
         <CartPanel
           totals={totals}
           taxes={breakdown}
@@ -356,9 +434,41 @@ export function PosTerminal() {
           onCustomer={() => setPickingCustomer(true)}
           onClear={() => void onClear()}
           onCharge={() => setCheckingOut(true)}
+          onHold={() => setHolding(true)}
+          onHeld={() => setHeldOpen(true)}
+          heldCount={parked.count}
         />
       </div>
 
+      <HoldSaleDialog
+        open={holding}
+        suggestion={cart.customer?.name ?? ''}
+        itemCount={totals.itemCount}
+        totalCents={totals.totalCents}
+        onClose={() => setHolding(false)}
+        onHold={hold}
+      />
+      <ParkedSalesDrawer
+        open={heldOpen}
+        shared={parked.shared}
+        local={parked.local}
+        loading={parked.loading}
+        offline={parked.offline}
+        onClose={() => setHeldOpen(false)}
+        onResume={resume}
+        onDiscard={discard}
+      />
+      <Modal open={!!swapFor} onClose={() => setSwapFor(null)} eyebrow="Resume held sale" title="This register has an open sale" width="sm">
+        <p className="text-sm text-dust">
+          Hold the current sale ({totals.itemCount} items · {money(totals.totalCents)}) and resume “{swapFor && heldName(swapFor)}”? Carts are never merged.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setSwapFor(null)}>Cancel</Button>
+          <Button variant="primary" icon="pause" onClick={() => void swapAndResume()} autoFocus>
+            Hold current and resume
+          </Button>
+        </div>
+      </Modal>
       <DiscountModal line={discountLine} onClose={() => setDiscountLine(null)} onApply={(l, d) => void applyDiscount(l, d)} />
       <CustomerPicker
         open={pickingCustomer}

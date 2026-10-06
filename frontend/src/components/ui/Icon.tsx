@@ -14,6 +14,7 @@ const paths = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
   barcode: 'M4 5v14M7 5v14M10 5v14M14 5v14M17 5v14M20 5v14M12 5v14',
   plus: 'M12 5v14M5 12h14',
+  pause: 'M8 5v14M16 5v14',
   minus: 'M5 12h14',
   x: 'M6 6l12 12M18 6 6 18',
   check: 'M5 12.5 10 17l9-10',

@@ -1,6 +1,6 @@
 # Sync Retail — Parked (Held) Sales
 
-**Implementation plan · v1 · 2026-10-06**
+**Implementation plan · v1 · 2026-10-06 — implemented 2026-10-06 (P1–P4; see §13)**
 
 A cashier can **hold** the sale in progress when a customer steps away (forgot an item, gone to fetch money, waiting for a price check) and serve the next person straight away. Later the cashier **resumes** it, on the same register or any other one in the store, and finishes it as if it had never left.
 
@@ -323,3 +323,33 @@ Admin → Store & loyalty:
 3. **Agents discarding their own held sale:** require a manager PIN (default, matching "void open transaction"), or allow it within, say, 10 minutes of holding?
 4. **Auto-hold:** should the idle lock or a cashier switching user automatically hold an open cart, so the next cashier starts clean? Default: no, the cart stays on the register as now.
 5. **Visibility:** every register sees every held sale (default; the customer may come back to any till), or only the register that held it?
+
+---
+
+## 13. Implementation status (2026-10-06)
+
+P1–P4 are implemented, using the defaults for every open question in §12: no stock reservation, 24 h expiry, agents need a manager PIN to discard, no auto-hold, every register sees every held sale.
+
+| Area | What shipped |
+|---|---|
+| Data | `ParkedSale` + `ParkedSaleStatus` (migration `20261006200000_parked_sales`, additive; verified identical to the Prisma schema with `migrate diff`) |
+| Shared | `shared/src/parked.ts`: types, limits, `reconcileParkedLines` (price, tax, removed, stock). Zod schemas live in the backend route, because `shared` has no zod dependency. |
+| API | `POST /api/parked-sales` (idempotent on `clientId`, server-priced, carries approvals), `GET /` (+ `?status=` for managers), `GET /count`, `POST /:id/resume` (atomic claim, 409 `PARKED_CLOSED` says who has it), `POST /:id/discard` (agents: `CLEAR_CART` override) |
+| Approvals | Validated when held. On resume they're re-signed for the resuming cashier, and `override.carried` is audited. Still single-use. |
+| Housekeeping | Runs lazily on list and count, at most once a minute: expiry (`parked.expire` audited) and a 90-day purge. No timers needed in either deployment mode. |
+| Live count | Store channel on the existing WebSocket (`/ws?channel=store`, session required, device-checked in host mode), plus a 30 s poll and refresh on focus |
+| Offline | Dexie v3 `parkedLocal`. Shown as "On this register — not shared yet". Uploaded by the sync loop (original time kept, attribution falls back if the session expired). Resumable locally while offline. |
+| UI | **Hold (F6)** with a note dialog (customer name pre-filled; Enter saves); **Held · N (F7)** drawer with search, item peek, a highlight after the remind time, Resume and Discard. Resume with an open cart offers **Hold current and resume** (the swapped sale is labelled "Swapped for …"). A **Changed while on hold** notice appears, and the catalog refreshes when prices or taxes moved. Customer display goes idle on hold and refills on resume. Kiosk guard now allows F6/F7. |
+| Settings | Admin → Store & loyalty: *Held sales expire after (hours)* (24) and *Highlight held sales after (min)* (30) |
+| Reports | A "Held sales" strip (held / resumed / discarded / expired / still held / abandoned value) in Reports, CSV and PDF |
+
+**Bug fixed along the way (all dialogs):** `Modal` moved focus to its ✕ button a moment after a field had autofocused. It also re-ran its focus effect on every parent re-render, because the inline `onClose` was in its dependency list. A cashier typing straight away could lose keystrokes, and Enter would close the dialog. The modal now keeps an existing focus inside the panel, prefers the first field, and uses a ref for `onClose`.
+
+**Verification**
+- Unit: 6 new tests for `reconcileParkedLines` (31 shared tests in total).
+- API (Docker): **25/25**. Covers settings defaults; store channel auth and push; hold snapshot, approvals, idempotency and unknown product; any cashier can list; **simultaneous resume, exactly one wins**, and the loser is told who has it; the carried 25 % discount approval works for the resuming cashier, isn't reusable, and is bound to them; price change and archived product reported; discard rules and listing permissions; an offline hold keeps its time and expires after 24 h; full audit trail.
+- UI (headless, two registers plus the customer display): **16/16**. Covers F6 hold with a note; register and display cleared; badge live on the other register; F7 drawer; resume with an open cart swaps; the change notice; completing a resumed sale; agent discard with a manager PIN; an offline hold shared after reconnect.
+- The idle-lock suite still passes (13/13) after the dialog-focus fix.
+
+**Not covered here:** a LAN test of two desktop registers against a Main Register. The same API and WebSocket paths are used, and paired-device checks apply to the new channel.
+

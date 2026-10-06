@@ -9,7 +9,7 @@ import { audit } from '../services/audit';
 
 export const customersRouter = Router();
 
-const toDTO = (c: Prisma.CustomerGetPayload<object>): CustomerDTO => ({
+export const toCustomerDTO = (c: Prisma.CustomerGetPayload<object>): CustomerDTO => ({
   id: c.id,
   name: c.name,
   phone: c.phone,
@@ -44,7 +44,7 @@ customersRouter.get('/', requirePermission('customers:read'), async (req, res) =
     orderBy: q.search ? { name: 'asc' } : { lifetimeSpendCents: 'desc' },
     take: q.take,
   });
-  res.json(rows.map(toDTO));
+  res.json(rows.map(toCustomerDTO));
 });
 
 customersRouter.get('/:id', requirePermission('customers:read'), async (req, res) => {
@@ -56,14 +56,14 @@ customersRouter.get('/:id', requirePermission('customers:read'), async (req, res
     },
   });
   if (!c) throw notFound('Customer');
-  res.json({ ...toDTO(c), notes: c.notes, sales: c.sales, loyaltyLedger: c.loyaltyLedger });
+  res.json({ ...toCustomerDTO(c), notes: c.notes, sales: c.sales, loyaltyLedger: c.loyaltyLedger });
 });
 
 customersRouter.post('/', requirePermission('customers:create'), async (req, res) => {
   const input = body(req, customerInput);
   const c = await prisma.customer.create({ data: { ...input, phone: normalizePhone(input.phone), email: input.email?.toLowerCase() ?? null } });
   await audit({ actorId: req.user!.id, action: 'customer.create', entity: 'Customer', entityId: c.id });
-  res.status(201).json(toDTO(c));
+  res.status(201).json(toCustomerDTO(c));
 });
 
 customersRouter.patch('/:id', requirePermission('customers:write'), async (req, res) => {
@@ -73,7 +73,7 @@ customersRouter.patch('/:id', requirePermission('customers:write'), async (req, 
     data: { ...input, ...(input.phone !== undefined && { phone: normalizePhone(input.phone) }), ...(input.email !== undefined && { email: input.email?.toLowerCase() ?? null }) },
   });
   await audit({ actorId: req.user!.id, action: 'customer.update', entity: 'Customer', entityId: c.id, details: { fields: Object.keys(input) } });
-  res.json(toDTO(c));
+  res.json(toCustomerDTO(c));
 });
 
 /** Manual points adjustment (goodwill, corrections) — always audited. */
@@ -86,5 +86,5 @@ customersRouter.post('/:id/points', requirePermission('customers:write'), async 
     return tx.customer.update({ where: { id: current.id }, data: { pointsBalance: { increment: applied } } });
   });
   await audit({ actorId: req.user!.id, action: 'customer.points_adjust', entity: 'Customer', entityId: c.id, details: { points, reason } });
-  res.json(toDTO(c));
+  res.json(toCustomerDTO(c));
 });

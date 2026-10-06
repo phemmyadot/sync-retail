@@ -19,10 +19,14 @@ interface Props {
   onCustomer: () => void;
   onClear: () => void;
   onCharge: () => void;
+  onHold: () => void;
+  onHeld: () => void;
+  /** Held sales waiting across the store (badge). */
+  heldCount: number;
 }
 
 /** The cart, rendered as a live thermal receipt. */
-export function CartPanel({ totals, taxes, onInc, onDec, onRemove, onDiscount, onCustomer, onClear, onCharge }: Props) {
+export function CartPanel({ totals, taxes, onInc, onDec, onRemove, onDiscount, onCustomer, onClear, onCharge, onHold, onHeld, heldCount }: Props) {
   const { lines, customer, lastAddedKey } = useCart();
   const { data: settings } = useSettings();
   const money = useMoney();
@@ -144,7 +148,28 @@ export function CartPanel({ totals, taxes, onInc, onDec, onRemove, onDiscount, o
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          onClick={onHold}
+          disabled={!lines.length}
+          className="key flex h-11 items-center justify-center gap-2 rounded-sm border border-line px-3 text-bone transition-colors hover:border-line-strong hover:bg-ink-3 disabled:opacity-35 disabled:hover:bg-transparent"
+        >
+          <Icon name="pause" size={16} />
+          <span className="font-medium">Hold</span>
+          <span className="rounded-xs border border-line px-1 font-mono text-2xs text-dust">F6</span>
+        </button>
+        <button
+          onClick={onHeld}
+          className="key flex h-11 items-center justify-center gap-2 rounded-sm border border-line px-3 text-bone transition-colors hover:border-line-strong hover:bg-ink-3"
+          aria-label={`Held sales (${heldCount})`}
+        >
+          <Icon name="history" size={16} />
+          <span className="font-medium">Held</span>
+          <span className={clsx('num min-w-[1.4rem] rounded-full px-1.5 text-center text-xs', heldCount ? 'bg-amber text-amber-ink' : 'bg-ink-3 text-dust')}>{heldCount}</span>
+          <span className="rounded-xs border border-line px-1 font-mono text-2xs text-dust">F7</span>
+        </button>
+      </div>
+      <div className="mt-2 grid grid-cols-[auto_1fr] gap-2">
         <button
           onClick={onClear}
           disabled={!lines.length}

@@ -170,6 +170,8 @@ export interface ReportSummary {
   categories: { name: string; revenueCents: number; quantity: number }[];
   /** Tax collected by class for the period (net of returns). */
   taxes: { name: string; rateBps: number; taxableCents: number; taxCents: number }[];
+  /** Held sales started in the period, by what became of them. Abandoned = discarded + expired value. */
+  held: { held: number; open: number; resumed: number; discarded: number; expired: number; abandonedCents: number };
   payments: { method: PaymentMethod; amountCents: number; count: number }[];
   workers: { userId: string; name: string; transactions: number; revenueCents: number; averageTicketCents: number; voids: number; overrides: number }[];
 }

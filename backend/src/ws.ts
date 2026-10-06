@@ -3,6 +3,15 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { verifySession } from './services/tokens';
 import { checkDeviceToken, hostMode, isLoopback } from './network/deviceAuth';
 
+// Store-wide channel: registers subscribe for live updates (held-sales count).
+const storeSockets = new Set<WebSocket>();
+
+/** Pushes a small JSON event to every signed-in register. */
+export function publishStore(msg: object) {
+  const text = JSON.stringify(msg);
+  for (const s of storeSockets) if (s.readyState === s.OPEN) s.send(text);
+}
+
 /**
  * Relay for the customer-facing display when it runs on a *different device*
  * (same-machine windows use BroadcastChannel and never touch the server).
@@ -29,6 +38,14 @@ export function attachDisplayRelay(server: Server) {
 
   wss.on('connection', (socket, req) => {
     const url = new URL(req.url ?? '', 'http://localhost');
+    //   ws://host/ws?channel=store&token=<jwt>   → store events (subscribe only)
+    if (url.searchParams.get('channel') === 'store') {
+      const t = url.searchParams.get('token');
+      if (!t || !verifySession(t)) return socket.close(4401, 'session required');
+      storeSockets.add(socket);
+      socket.on('close', () => storeSockets.delete(socket));
+      return;
+    }
     const terminal = (url.searchParams.get('terminal') ?? '').slice(0, 40);
     if (!terminal) return socket.close(4400, 'terminal required');
     const token = url.searchParams.get('token');

@@ -3,6 +3,7 @@ import { api, ApiError, NetworkError } from './api';
 import { getMeta, localDb, setMeta, type OutboxSale } from './db';
 import { useAuth } from '@/store/auth';
 import { useSyncStatus } from '@/store/sync';
+import { flushParked } from './parked';
 
 const status = () => useSyncStatus.getState();
 
@@ -136,6 +137,7 @@ export async function retryFailed() {
 export function startSyncLoop() {
   const tick = async () => {
     await flushOutbox();
+    await flushParked();
     await pullCatalog();
   };
   const onOnline = () => {
