@@ -190,6 +190,8 @@ jobs:
           body: |
             **Windows installer:** `${{ steps.installer.outputs.name }}` (check it against `SHA256SUMS.txt`).
 
-            ${{ env.SIGN == 'true' && 'Signed via SignPath (certificate by SignPath Foundation).' || 'This build is **not code-signed**: Windows SmartScreen will warn. Click **More info → Run anyway** to install.' }}
+            ${{ env.SIGN == 'true' && '✅ **Code-signed.** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).' || '⚠️ **This build is not code-signed yet**: Windows SmartScreen will warn. Click **More info → Run anyway** to install. Sync Retail is applying for free code signing by [SignPath Foundation](https://signpath.org) ([SignPath.io](https://about.signpath.io)); signed builds will follow.' }}
+
+            Code signing policy, team roles and privacy statement: [README → Code signing policy](https://github.com/${{ github.repository }}/blob/main/README.md#code-signing-policy).
 
             Installing needs administrator rights (the app installs for all users and adds a firewall rule so registers on the store network can connect). Existing data is kept when installing over an older version.
